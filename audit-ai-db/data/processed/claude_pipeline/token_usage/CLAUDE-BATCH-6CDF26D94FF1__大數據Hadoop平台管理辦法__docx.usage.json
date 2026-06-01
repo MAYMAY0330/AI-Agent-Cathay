@@ -1,0 +1,19 @@
+{
+  "calls": [
+    {
+      "call_name": "claude_chunking",
+      "model": "claude-sonnet-4-5-20250929",
+      "input_tokens": 2144,
+      "output_tokens": 3324,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "total_tokens": 5468
+    }
+  ],
+  "totals": {
+    "claude_calls": 1,
+    "input_tokens": 2144,
+    "output_tokens": 3324,
+    "total_tokens": 5468
+  }
+}

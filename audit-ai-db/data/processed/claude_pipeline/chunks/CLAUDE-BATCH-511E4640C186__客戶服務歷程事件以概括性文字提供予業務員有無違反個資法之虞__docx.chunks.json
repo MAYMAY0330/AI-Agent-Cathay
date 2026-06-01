@@ -1,0 +1,67 @@
+{
+  "document_type": "legal_opinion",
+  "short_summary": "本法務室意見係針對公司將客戶服務歷程資料庫中的客戶資料,以概括性文字提供予具經手服務關係之業務同仁,是否違反個人資料保護法進行分析。結論認為,若已取得當事人同意且利用與蒐集目的具正當合理關聯,且基於客戶服務需要提供予經手服務關係之業務同仁知悉,屬公司內部利用,應無適法性疑義,惟須依誠實及信用方法為之。",
+  "keywords": [
+    "個人資料保護法",
+    "客戶服務歷程",
+    "業務員",
+    "Cathay Box",
+    "CRM2.0",
+    "個人資料利用",
+    "特定目的",
+    "內部利用",
+    "誠實信用原則"
+  ],
+  "main_topics": [
+    "客戶服務歷程資料庫之個資利用",
+    "業務員取得客戶資料之合法性",
+    "個資法特定目的與必要範圍原則",
+    "公司內部個資利用之適法性"
+  ],
+  "chunks": [
+    {
+      "chunk_index": 1,
+      "chunk_level": "header",
+      "source_structure_type": "document_header",
+      "heading_path": "文件標題",
+      "section_title": "文件標題",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "# 客戶服務歷程事件以概括性文字提供予業務員有無違反個資法之虞"
+    },
+    {
+      "chunk_index": 2,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "法務室意見 > 案情說明與問題提出",
+      "section_title": "法務室意見",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "法務室意見\n\n緣公司為提升業務員工作效率及因應數位轉型計畫,已啟動業務員Cathay Box改版及CRM2.0專案,現擬運用公司建置之「客戶服務歷程資料庫」,將客戶之適宜服務歷程事件,以概括性文字描述之方式,提供予具經手服務關係之業務同仁。貴單位(數據經營部客戶智能科)爰詢問:前揭規劃有無違反個人資料保護法(下稱個資法)之虞?本室謹復意見如下。"
+    },
+    {
+      "chunk_index": 3,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "法務室意見 > 法律依據",
+      "section_title": "法律依據",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "按「本法用詞,定義如下:一、個人資料:指自然人之姓名、…聯絡方式、財務情況、社會活動及其他得以直接或間接方式識別該個人之資料。」、「個人資料之蒐集、處理或利用,應尊重當事人之權益,依誠實及信用方法為之,不得逾越特定目的之必要範圍,並應與蒐集之目的具有正當合理之關聯。」、「非公務機關對個人資料之利用,除第六條第一項所規定資料外,應於蒐集之特定目的必要範圍內為之。」個資法第2條第1款、第5條及第20條第1項本文定有明文。"
+    },
+    {
+      "chunk_index": 4,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "法務室意見 > 法律分析與結論",
+      "section_title": "法律分析與結論",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "查貴單位檢附之附件中有關提供業務同仁之文字訊息欄位,含客戶姓名及保單號碼,核屬客戶個人資料,倘已取得當事人同意公司為蒐集、處理及利用,且其利用與蒐集之目的具有正當合理之關聯者,則於法尚無不合。復公司如基於客戶服務需要而提供予經手服務關係之業務同仁知悉,係屬公司內部之利用,應尚無適法性疑義,惟須注意應依誠實及信用方法為之。"
+    }
+  ]
+}

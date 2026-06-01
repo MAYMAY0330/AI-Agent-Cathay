@@ -1,0 +1,159 @@
+{
+  "document_type": "system_manual",
+  "short_summary": "本辦法規範國泰人壽大數據Hadoop平台之數據儲存、處理、程式開發與部署相關程序，並有效管理平台使用及維運作業。內容涵蓋平台定義、帳號申請管理、程式開發流程、資料表管理、安全管理、保密義務及罰則等事項。權責單位為數據暨人工智慧發展部，適用於全公司大數據平台相關作業。",
+  "keywords": [
+    "大數據",
+    "Hadoop平台",
+    "數據管理",
+    "帳號管理",
+    "程式開發",
+    "資料表申請",
+    "VDI平台",
+    "資訊安全",
+    "保密義務",
+    "數據暨人工智慧發展部"
+  ],
+  "main_topics": [
+    "大數據Hadoop平台定義與範圍",
+    "用詞定義及單位權責",
+    "平台使用者帳號申請與管理",
+    "平台電腦作業及程式開發",
+    "資料表申請與管理",
+    "平台安全管理",
+    "保密義務與罰則"
+  ],
+  "chunks": [
+    {
+      "chunk_index": 1,
+      "chunk_level": "header",
+      "source_structure_type": "document_header",
+      "heading_path": "文件標題",
+      "section_title": "文件標題",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "大數據Hadoop平台管理辦法\n\n國泰人壽保險公司大數據Hadoop平台管理辦法\n\n113年1月30日修訂\n\n權責單位：數據暨人工智慧發展部"
+    },
+    {
+      "chunk_index": 2,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "目的",
+      "section_title": "目的",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "目的\n\n為規範本公司「大數據Hadoop平台」之數據儲存、處理、程式開發與部署之相關程序，並有效管理本平台相關使用及維運作業，特訂定本辦法。"
+    },
+    {
+      "chunk_index": 3,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "適用範圍",
+      "section_title": "適用範圍",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "適用範圍\n\n本公司應依本辦法之規定辦理大數據Hadoop平台相關事宜。\n\n本辦法如有未盡事宜，悉依相關法令、「國泰金融控股股份有限公司暨各子公司大數據Hadoop平台管理要點」（下稱金控大數據平台管理要點）、「國泰人壽保險公司機器學習平台使用管理要點」或金控及本公司其他有關規章之規定辦理。"
+    },
+    {
+      "chunk_index": 4,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "大數據Hadoop平台",
+      "section_title": "大數據Hadoop平台",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "大數據Hadoop平台\n\n所稱「大數據Hadoop平台」（下稱本平台）係指本公司提供之伺服器環境，其彙整儲存內外部資料做為資料分析建模及提供巨量資料的儲存和處理能力。\n\n前項伺服器環境包含大數據分析平台Hadoop Analysis Platform、大數據資料湖Hadoop DataLake、相關運行伺服器及儲存空間等，或經申請後使用本平台相關之資源，及本平台另外產生的複合式環境。"
+    },
+    {
+      "chunk_index": 5,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "用詞定義及單位權責",
+      "section_title": "用詞定義及單位權責",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "用詞定義及單位權責\n\n本辦法相關用詞定義及單位權責說明如下：\n\n平台資訊管理單位: 由數據工程組負責本平台之作業流程規劃、資料流系統架構規劃及帳號管理，並擔任內稽內控窗口，下稱作業單位。\n\n平台業務需求單位:係指基於業務需求，經申請且被授權於本平台上進行資料分析或使用之業務單位，下稱需求單位。\n\n有關本辦法之適用，如有未盡事宜，作業單位保有最終解釋權。"
+    },
+    {
+      "chunk_index": 6,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "平台使用者帳號申請與管理",
+      "section_title": "平台使用者帳號申請與管理",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "平台使用者帳號申請與管理\n\n需求單位人員得因業務需要，依金控大數據平台管理要點檢附相關文件，經需求單位科級主管(或代理人)核准後，向作業單位提出申請或刪除大數據分析平台業務使用者帳號及權限。\n\n作業單位應遵循金控大數據平台管理要點程序，定期檢核各需求單位業務使用者名單及權限。\n\n需求單位使用者如有離職或調動情事者，應於正式生效前，依本辦法第五條，向作業單位申請刪除該員之帳號及權限，並納入內部稽核項目定期查核。"
+    },
+    {
+      "chunk_index": 7,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "平台電腦作業及程式開發",
+      "section_title": "平台電腦作業及程式開發",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "平台電腦作業及程式開發\n\n需求單位因相關業務有電腦作業需求者，應依「電腦作業申請管理要點」程序並檢附相關文件，向作業單位提出電腦作業申請。\n\n作業單位須依「電腦作業申請管理要點」相關程序與需求單位進行需求溝通及程式測試驗收。於驗收完成後，始可依「程式異動管理施行細則」進行正式環境程式部署及上架等作業。\n\n作業單位發現電腦作業發生問題而無法自行排除者，須依「電腦作業問題管理辦法」，逕至問題管理系統填報，或向電腦服務台人員申報。"
+    },
+    {
+      "chunk_index": 8,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "資料表申請與管理",
+      "section_title": "資料表申請與管理",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "資料表申請與管理\n\n需求單位申請本平台資料表權限、導入或相關作業，應遵循「數據平台使用管理要點」之規定，透過表單管理系統提出申請，並完整說明使用目的、申請資料表名稱等資訊。本平台資料表權限清查應依「數據平台使用管理要點」定期檢視，以移除無使用需求之項目表格權限。"
+    },
+    {
+      "chunk_index": 9,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "平台安全管理",
+      "section_title": "平台安全管理",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "平台安全管理\n\n本平台須使用VDI平台連線使用。\n\nVDI平台應側錄使用者帳號及作業時間操作畫面，並依「日誌留存暨管理系統管理要點」及「VDI平台管理施行細則」留存側錄主機，以供查核。\n\n本平台相關作業應符合金控大數據平台管理要點及相關管理維護單位之資訊安全政策。"
+    },
+    {
+      "chunk_index": 10,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "保密義務",
+      "section_title": "保密義務",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "保密義務\n\n本平台之維護人員、開發人員、使用人員，於接觸或使用該資料時，不得有洩漏或移作他用之情事，並需依相關規定使用本平台數據資料。前述人員所屬單位之科級主管負有控管該資料之責任，並應責成相關人員嚴守保密義務。"
+    },
+    {
+      "chunk_index": 11,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "罰則",
+      "section_title": "罰則",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "罰則\n\n如有違反本辦法之規定事項，致影響公司或保戶權益，經查證屬實者，除移送人事管理單位議處外，行為人並應自負相關民、刑事責任。"
+    },
+    {
+      "chunk_index": 12,
+      "chunk_level": "section",
+      "source_structure_type": "manual_step",
+      "heading_path": "施行日期",
+      "section_title": "施行日期",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "施行日期\n\n本辦法呈總經理核定後施行，修正或廢止時亦同。\n本辦法訂於111年10月03日，歷次修正紀錄如下：112年12月18日、113年1月30日。"
+    }
+  ]
+}

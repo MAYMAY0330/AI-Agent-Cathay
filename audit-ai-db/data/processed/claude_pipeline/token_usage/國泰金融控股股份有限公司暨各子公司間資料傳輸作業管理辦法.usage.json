@@ -1,0 +1,28 @@
+{
+  "calls": [
+    {
+      "call_name": "claude_vision_page_5",
+      "model": "claude-sonnet-4-5-20250929",
+      "input_tokens": 1713,
+      "output_tokens": 294,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "total_tokens": 2007
+    },
+    {
+      "call_name": "claude_chunking",
+      "model": "claude-sonnet-4-5-20250929",
+      "input_tokens": 3422,
+      "output_tokens": 4417,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "total_tokens": 7839
+    }
+  ],
+  "totals": {
+    "claude_calls": 2,
+    "input_tokens": 5135,
+    "output_tokens": 4711,
+    "total_tokens": 9846
+  }
+}

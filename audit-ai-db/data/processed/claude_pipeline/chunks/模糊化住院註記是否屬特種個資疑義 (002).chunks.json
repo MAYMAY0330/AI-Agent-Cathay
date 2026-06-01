@@ -1,0 +1,188 @@
+{
+  "document_type": "legal_opinion",
+  "short_summary": "本案係國泰人壽數據暨人工智慧發展部就經模糊化處理之住院註記資料(包含期間住院理賠總次數、平均天數等統計數據)是否屬個人資料保護法第6條規定之特種個資,向法務室請求法律意見。法務室意見認為該等統計數據非病歷或醫療資料,不屬特種個資,惟因併同客戶ID上傳仍屬個人資料,應遵守個資法規範。",
+  "keywords": [
+    "特種個資",
+    "個人資料保護法",
+    "模糊化",
+    "住院註記",
+    "理賠數據",
+    "病歷",
+    "醫療資料",
+    "客戶ID",
+    "資料去識別化"
+  ],
+  "main_topics": [
+    "特種個資認定",
+    "模糊化資料之法律性質",
+    "個人資料保護法適用",
+    "集團資料共享合規"
+  ],
+  "chunks": [
+    {
+      "chunk_index": 1,
+      "chunk_level": "header",
+      "source_structure_type": "document_header",
+      "heading_path": "文件標題",
+      "section_title": "文件標題",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "模糊化住院註記是否屬特種個資疑義 (002)\n\n創文日期 : 2024/02/20\n文件編號 : 9H0020011300010\n密等：普通\n速別：最速件\n承辦單位： 國泰人壽．數據暨人工智慧發展部商業智能科\n承辦人：趙家馳\n聯絡電話：02 27551399 7141"
+    },
+    {
+      "chunk_index": 2,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "主旨",
+      "section_title": "主旨",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "針對經過模糊化的住院註記是否為特種個資，敬請貴部室釋義"
+    },
+    {
+      "chunk_index": 3,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "說明 > 案由說明",
+      "section_title": "案由說明",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "基於112年1月9日金管銀銀行法字第11102253601號令，為了完善集團風險分之建置，本案為金控發起之合作案，擬彙整集團資料，以作為內部分析與風險控管之用。本次預計導入之模糊化的住院註記資料，預計將放置於金控資料倉儲中資料工作層，儲存及使用上皆符合金控倉儲管理要點及金控暨各子公司間資料共享管理辦法之相關規範。"
+    },
+    {
+      "chunk_index": 4,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "說明 > 專案說明以及法律問題",
+      "section_title": "專案說明以及法律問題",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "因應今年度集團風險分專案 – 建立財務風險分模型的規劃，欲從人壽端上傳資料表 \"客戶的住院註記\"至金控環境，專案說明於附件簡報P1~P3，模糊化的住院註記處理說明於簡報P4~P6，本次想詢問之問題於附件簡報中P6：\n\n選項A: 上傳ID & 期間住院理賠總次數 & 期間住院理賠平均天數\n選項B: 上傳ID & 期間住院理賠總次數 & 期間住院理賠有效觀察比例次數\n\n本次欲詢問這兩種選項對應的資料是否為特種個資，請協助釋義。"
+    },
+    {
+      "chunk_index": 5,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "說明 > 參考資料補充",
+      "section_title": "參考資料補充(已參考過去法律意見，無一樣問題)",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "補充資料參考：憲法法庭111年憲判字第13號判決摘要\n網址：https://www.judicial.gov.tw/tw/cp-1887-695919-b05e7-1.html\n\n本次欲釋義的客戶的住院註記，會依據簡報P4中做不可還原的加工，其為遮蔽後的資料，於簡報P6兩種選項的住院資料為不同程度的遮蔽程度。\n\n此健保的判例摘要【35】有提到：[反之，經處理之資料於客觀上無還原識別個人之可能時，即已喪失個資之本質，當事人就該資訊自不再受憲法第22條個人資訊隱私權之保障。] 以及此判例【56】提到：[惟完全不具還原識別可能性之匿名資料，已非受憲法第22條資訊隱私權保障之個資。]\n\n因應此判例，經過模糊化後的資料應需要符合\" 不可還原\"的要素，本次客戶的住院註記資料兩種選項資料，皆是描述客戶在某期間內之住院註記，代表不同客戶某期間內住院的相對狀況，最後的資料皆無法還原客戶的原本的住院起日以及迄日，應具備判例所說完全不具還原識別可能性之匿名資料。惟遮蔽程度有所不同，此部分還請釋義兩種資料經模糊化後是否為特種個資。"
+    },
+    {
+      "chunk_index": 6,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "各單位意見 > 承辦",
+      "section_title": "各單位意見 - 承辦",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 1,
+      "chunk_text": "承辦\n數據暨人工智慧發展部商業智能科．趙家馳 資料科學分析師\n2024/02/20 17:08:36"
+    },
+    {
+      "chunk_index": 7,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "各單位意見 > 同意",
+      "section_title": "各單位意見 - 同意(數據暨人工智慧發展部)",
+      "clause_number": null,
+      "page_start": 1,
+      "page_end": 2,
+      "chunk_text": "同意\n數據暨人工智慧發展部．陳儀鍼 資深商業分析師\n2024/02/20 17:12:57\n\n同意\n數據暨人工智慧發展部．莊淑儀 專案協理\n2024/02/20 17:45:15"
+    },
+    {
+      "chunk_index": 8,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "各單位意見 > 法務室意見",
+      "section_title": "法務室意見",
+      "clause_number": null,
+      "page_start": 2,
+      "page_end": 2,
+      "chunk_text": "會簽\n法務室法律諮詢暨訴訟科．張天香 經理\n2024/02/23 10:28:28\n\n一、按個人資料保護法（下稱個資法）第6條規定之「特種個資」，應係指「病歷、醫療、基因、性生活、健康檢查及犯罪前科」之個人資料。\n\n二、經查，選項A、B對應之客戶住院註記資料為「住院理賠總次數/平均天數/有效觀察比例次數」，僅屬公司理賠業務之統計數據，並非客戶之病歷或醫療資料，不屬特種個資範疇；惟考量選項A、B均係將客戶ID連同前述理賠數據一併上傳，合併觀察時即足以直接識別特定客戶，而屬個人資料無疑，故不論採何種選項，仍應遵守個資法之相關規範，提請注意。"
+    },
+    {
+      "chunk_index": 9,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "附件往來郵件 > 釋義範圍確認",
+      "section_title": "釋義範圍確認郵件",
+      "clause_number": null,
+      "page_start": 4,
+      "page_end": 4,
+      "chunk_text": "寄件者: 趙家馳 <qqcat1@cathaylife.com.tw>\n寄件日期: 2024年2月21日星期三 下午 4:20\n收件者: kuo.c.yi@cathaylife.com.tw\n副本: 莊淑儀; '黃郁凱-商業智能科'\n主旨: 針對照會法務的公文 9H0020011300010 釋義部分修正\n\nDear 瀞憶\n\n根據與您的回饋，以下補充針對照會單#9H0020011300010的欲釋義內容進行說明，\n(註：照會單主旨：針對經過模糊化的住院註記是否為特種個資，敬請貴部室釋義)\n\n該照會單欲請法務室釋義部分僅需要照會單內容中法律問題項目：\n\n選項A: 上傳ID & 期間住院理賠總次數 & 期間住院理賠平均天數\n選項B: 上傳ID & 期間住院理賠總次數 & 期間住院理賠有效觀察比例次數\n本次欲詢問這兩種選項對應的資料是否為特種個資，請協助釋義。\n\n因此，於案由中所提金管銀銀行法字第11102253601號令，以及補充資料提供參考的憲法法庭111年憲判字第13號判決摘要，僅為可能可以提供協助判斷之補充資料，請貴部室只需要針對上方黃色底文字進行釋義即可\n\n若有問題還請聯絡我 謝謝"
+    },
+    {
+      "chunk_index": 10,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "附件簡報 > 建立財務風險分模型背景",
+      "section_title": "為什麼我們建立財務風險分模型?",
+      "clause_number": null,
+      "page_start": 5,
+      "page_end": 5,
+      "chunk_text": "為什麼我們建立財務風險分模型?\n\n客戶銀行資料，識別體況風險的重要資料來源。\n\n【國外再保公司(Munich、RGA)及核保新創公司UnderwriteMe 經驗】\n\n*註：財務風險分也可稱銀行風險分，以下以財務風險分說明"
+    },
+    {
+      "chunk_index": 11,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "附件簡報 > 集團資料池架構",
+      "section_title": "以集團資料池資料，於金控建置及佈署財務風險分模型",
+      "clause_number": null,
+      "page_start": 6,
+      "page_end": 6,
+      "chunk_text": "以集團資料池資料，於金控建置及佈署財務風險分模型\n\n第一層 基本層(原始資料庫)(子公司資料庫)\n第二層 集團資料池層\n第三層 主題式資料層(Data mart)\n第四層 業務應用層(Application)\n\n資料類型包含：\n- 客戶基本資料：線下客戶、線上客戶基本資料\n- 產品/業務往來：信貸、房貸MG、存款DP、信用卡CC、財管商品FM、放款MG\n- 機敏資料：特種個資、聯徵資料\n- 地理加值資料、異業生態圈、公開資料\n\n應用：風險、業務、行銷、國泰盾、營運平台(GDP)、AML、自主分析\n\n財務風險分模型產出結果(客戶名單)提供子公司"
+    },
+    {
+      "chunk_index": 12,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "附件簡報 > 未來展望",
+      "section_title": "未來展望- 財務風險分2.0",
+      "clause_number": null,
+      "page_start": 7,
+      "page_end": 7,
+      "chunk_text": "未來展望- 財務風險分2.0\n\n銀行全客戶可評分\n新增住院財務風險分、模型拉長年期\n\n- 全體銀行客戶製作X變數。\n  協作單位：銀行保代部、銀行數據生態營運部、金控資訊處、金控數據暨人工智慧發展部\n\n- 新增住院風險Y變數。\n  將死亡、住院的觀察年期拉長至68個月\n  協作單位：金控資訊處、金控數據暨人工智慧發展部、人壽行銷資訊部、人壽精算一部。\n\n時程：\n2018/3/31 模型訓練\n2018/04/01 追蹤始期\n原追蹤47個月\n拉長至追蹤68個月\n2023/11/30 追蹤終期\n\n新增風險類型：死亡風險、住院風險、手術風險\n\n國泰世華共銷：296萬 -> 829萬"
+    },
+    {
+      "chunk_index": 13,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "附件簡報 > 住院註記處理方式",
+      "section_title": "住院註記的處理",
+      "clause_number": null,
+      "page_start": 8,
+      "page_end": 8,
+      "chunk_text": "住院註記的處理\n\n為對應精算計算發生率，每個ID在訓練期的理賠住院狀態被整理成：\n期間住院理賠總次數與期間住院理賠平均天數\n\n原始資料範例：\nID          住院理賠起日    住院理賠訖日\nF123123000  2021-3-1      2021-3-6\nF123123000  2021-4-10     2021-4-12\nF123123000  2021-5-6      2021-5-8\nF255566677  2021-9-7      2021-9-8\nF255566677  2021-9-16     2021-9-16\nF255566677  2021-10-1     2021-10-14\n\n處理後資料：\nID          本次住院理賠總日數\nF123123000  6\nF123123000  3\nF123123000  3\nF255566677  18\n\n最終整理：\nID          期間住院理賠總日數  期間住院理賠總次數  期間住院理賠平均天數\nF123123000  12                3                4\nF255566677  18                3                6\n\n(此步驟無可還原性)"
+    },
+    {
+      "chunk_index": 14,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "附件簡報 > 模糊化處理說明",
+      "section_title": "住院註記的處理已完全模糊化，不具真實理賠受理申請定義",
+      "clause_number": null,
+      "page_start": 9,
+      "page_end": 9,
+      "chunk_text": "住院註記的處理已完全模糊化，不具真實理賠受理申請定義\n\n資料範例：\nID          期間住院理賠  期間住院理賠  期間住院理賠  模型有效觀察  期間住院理賠\n           總日數      總次數      平均天數      天數         有效觀察比例\nF123123000  12         3          4           365         0.0082\nF255566677  18         3          6           280         0.0107\n\n調整方法: 完全模糊化次數\n\n目前期間住院理賠總次數仍具有原始住院理賠意義，但模型訓練可以將其改成期間住院理賠有效觀察比例\n\n計算方式:期間住院理賠總次數/ 模型有效觀察天數= 0~1的值，已不具原始住院理賠意義\n\n再度模糊化(此步驟無可還原性)"
+    },
+    {
+      "chunk_index": 15,
+      "chunk_level": "section",
+      "source_structure_type": "legal_opinion_section",
+      "heading_path": "附件簡報 > 詢問問題",
+      "section_title": "詢問：兩種模糊化結果選項是否為特種個資",
+      "clause_number": null,
+      "page_start": 10,
+      "page_end": 10,
+      "chunk_text": "詢問：兩種模糊化結果選項是否為特種個資\n\n選項A: 上傳ID & 期間住院理賠總次數& 期間住院理賠平均天數\n選項B: 上傳ID & 期間住院理賠平均天數& 期間住院理賠有效觀察比例次數\n\n資料範例：\nID          期間住院理賠  期間住院理賠  期間住院理賠  模型有效觀察  期間住院理賠\n           總日數      總次數      平均天數      天數*註     有效觀察比例\nF123123000  12         3          4           365         0.0082\nF255566677  18         3          6           280         0.0107\n\n資料區間：2018/04/01~2023/12/01 共68月的住院註記資料供模型訓練\n\n註：模型有效觀察天數無特種個資議題，該欄位為判斷該客戶持有有效住院險的天數，計算方式可參考P5"
+    }
+  ]
+}
