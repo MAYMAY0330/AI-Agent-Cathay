@@ -157,6 +157,85 @@ The Claude folder runner is cost-safe by default:
 - Use `--include-pdf-duplicates` only when you intentionally want to process both DOCX and PDF copies.
 - Use `--vision-mode full` only when image-heavy mixed pages must be read by Claude Vision.
 
+## Run Company Gemini Ingestion Path
+
+The Gemini path is a parallel ingestion route for the company laptop. It is kept
+in a separate package at `company_gemini_ingestion/`, while the default
+`ingestion/` package stays focused on the rule-based and Claude paths.
+
+The Gemini route follows the same high-level flow as the Claude path, but calls
+Gemini with the company API key and the internal REST/SSL workaround from the
+company Gemini guide.
+
+Do not commit the real key. On the company laptop, add it only to `.env`:
+
+```text
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-1.5-pro
+```
+
+Recommended first test: parse only a couple of pages and do not write to DB:
+
+```bash
+python -m company_gemini_ingestion.run_gemini_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "GEMINI-TEST-001" \
+  --document-type "legal_opinion" \
+  --source-system "gemini_test" \
+  --language "zh-TW" \
+  --max-pages 2 \
+  --no-db
+```
+
+If the Markdown and chunks JSON look good, run without `--max-pages` and
+without `--no-db` to write into PostgreSQL:
+
+```bash
+python -m company_gemini_ingestion.run_gemini_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "GEMINI-DOC-001" \
+  --document-type "legal_opinion" \
+  --source-system "gemini_ingestion" \
+  --language "zh-TW"
+```
+
+Gemini path outputs are written to:
+
+```text
+data/processed/gemini_pipeline/
+├── markdown/
+├── page_analysis/
+├── page_images/
+├── chunks/
+├── chunk_raw/
+└── token_usage/
+```
+
+For a folder-level Gemini dry run:
+
+```bash
+python -m company_gemini_ingestion.run_gemini_folder data/raw --dry-run --limit 3
+```
+
+For a small folder-level Gemini parse test without database writes:
+
+```bash
+python -m company_gemini_ingestion.run_gemini_folder \
+  data/raw \
+  --no-db \
+  --vision-mode minimal \
+  --max-vision-pages-per-file 10
+```
+
+The Gemini folder runner uses the same safety controls as the Claude runner:
+
+- `--vision-mode minimal` sends only image-only/scanned PDF pages to Gemini Vision.
+- Mixed text+image PDF pages use local text extraction instead of Gemini Vision.
+- PDFs are skipped when a DOCX with the same filename stem exists.
+- `--max-vision-pages-per-file 10` skips very large scanned PDFs instead of letting one file consume a large number of calls.
+- Use `--include-pdf-duplicates` only when you intentionally want to process both DOCX and PDF copies.
+- Use `--vision-mode full` only when image-heavy mixed pages must be read by Gemini Vision.
+
 Supported document types for structure detection:
 
 - `internal_rule`
