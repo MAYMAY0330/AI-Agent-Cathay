@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ingestion.config import _load_dotenv_file
 from ingestion.models import IngestionError
+from ingestion.text_cleaner import clean_extracted_text
 
 
 TEXT_HIGH = 200
@@ -152,7 +153,7 @@ def analyze_pdf_pages(pdf_path: Path, vision_mode: str = "minimal") -> list[Page
     try:
         for page_index in range(document.page_count):
             page = document.load_page(page_index)
-            text = page.get_text("text").strip()
+            text = clean_extracted_text(page.get_text("text"))
             image_count = len(page.get_images(full=True))
             route = route_page(len(text), image_count, vision_mode)
             pages.append(
@@ -298,7 +299,7 @@ def _read_docx_as_markdown(
 
     lines = [f"# {file_path.stem}", ""]
     for paragraph in document.paragraphs:
-        text = paragraph.text.strip()
+        text = clean_extracted_text(paragraph.text)
         if not text:
             continue
         style = paragraph.style.name.lower() if paragraph.style else ""
@@ -311,7 +312,10 @@ def _read_docx_as_markdown(
     for table_index, table in enumerate(document.tables, start=1):
         lines.append(f"\n## Table {table_index}\n")
         for row in table.rows:
-            cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+            cells = [
+                clean_extracted_text(cell.text).replace("\n", " ")
+                for cell in row.cells
+            ]
             if any(cells):
                 lines.append("| " + " | ".join(cells) + " |")
 
@@ -334,7 +338,7 @@ def _extract_pdf_page_text(pdf_path: Path, page_number: int) -> str:
     document = fitz.open(str(pdf_path))
     try:
         page = document.load_page(page_number - 1)
-        return page.get_text("text").strip()
+        return clean_extracted_text(page.get_text("text"))
     finally:
         document.close()
 

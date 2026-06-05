@@ -5,6 +5,7 @@ from typing import Any
 
 from ingestion.config import DBConfig
 from ingestion.models import ChunkRecord, DocumentMetadata, IngestionError, SummaryResult
+from ingestion.text_cleaner import clean_extracted_text
 
 
 def connect(config: DBConfig):
@@ -151,25 +152,27 @@ def insert_document_chunks(
     version_id: Any,
     chunks: Iterable[ChunkRecord],
 ) -> int:
-    rows = [
-        (
-            document_id,
-            version_id,
-            chunk.parent_chunk_id,
-            chunk.chunk_index,
-            chunk.chunk_level,
-            chunk.source_structure_type,
-            chunk.heading_path,
-            chunk.section_title,
-            chunk.clause_number,
-            chunk.page_start,
-            chunk.page_end,
-            chunk.chunk_text,
-            chunk.token_count,
-            chunk.char_count,
+    rows = []
+    for chunk in chunks:
+        chunk_text = clean_extracted_text(chunk.chunk_text)
+        rows.append(
+            (
+                document_id,
+                version_id,
+                chunk.parent_chunk_id,
+                chunk.chunk_index,
+                chunk.chunk_level,
+                chunk.source_structure_type,
+                chunk.heading_path,
+                chunk.section_title,
+                chunk.clause_number,
+                chunk.page_start,
+                chunk.page_end,
+                chunk_text,
+                chunk.token_count,
+                len(chunk_text),
+            )
         )
-        for chunk in chunks
-    ]
     if not rows:
         return 0
 

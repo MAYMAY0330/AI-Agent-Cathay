@@ -8,8 +8,10 @@ It currently includes:
 - SQL migrations
 - sample document metadata
 - Python ingestion for local PDF and DOCX files
+- RAG retrieval v1 for keyword and metadata search over imported chunks
+- CLI guarded RAG agent workflow for cited answer generation
 
-It does not include embedding generation, RAG orchestration, agents, chatbot workflows, OCR, internal database crawling, or frontend code.
+It does not include chatbot workflows, OCR, internal database crawling, or frontend code.
 
 ## Requirements
 
@@ -124,6 +126,46 @@ python -m ingestion.run_ingestion \
 ```
 
 See `ingestion/README.md` for the pipeline stages, duplicate/version behavior, and supported document types.
+
+## Run Retrieval Search
+
+After documents have been ingested into PostgreSQL, search imported chunks:
+
+```bash
+python -m rag.run_search "客戶資料共享是否需要客戶同意？" --limit 5
+```
+
+The retrieval layer combines chunk keyword/full-text search with document metadata search. It can also use vector search after chunk embeddings are generated. See `rag/README.md` for filters and output options.
+
+Preview a grounded RAG answer context without calling an LLM:
+
+```bash
+python -m rag.run_answer "客戶資料共享是否需要客戶同意？" --no-llm
+```
+
+On the company laptop, after setting `GEMINI_API_KEY`, generate an answer:
+
+```bash
+python -m rag.run_answer "客戶資料共享是否需要客戶同意？"
+```
+
+## Run Agent Workflow
+
+Run the modular guarded RAG agent without calling an LLM:
+
+```bash
+python -m agent.run "資料共享是否需要告知客戶？" --dry-run
+```
+
+The agent normalizes the question, plans search tasks, retrieves evidence,
+checks evidence sufficiency, builds answer context, verifies citations, and
+writes JSONL run logs under `data/processed/agent_runs/`.
+
+On the company laptop, after setting `GEMINI_API_KEY`, generate a cited answer:
+
+```bash
+python -m agent.run "資料共享是否需要告知客戶？"
+```
 
 ## Tables
 
