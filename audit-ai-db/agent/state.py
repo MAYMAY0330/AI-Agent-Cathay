@@ -34,6 +34,22 @@ class EvidenceBundle:
 
 
 @dataclass(frozen=True)
+class EvidenceJudgment:
+    label: str
+    chunk_id: str
+    checklist: dict[str, int]
+    score: int
+    max_score: int
+    classification: str
+    reason: str
+    supporting_quote: str = ""
+    mode: str = "deterministic"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class AgentAnswer:
     status: str
     answer: str
@@ -64,6 +80,7 @@ class AgentState:
     search_tasks: list[SearchTask] = field(default_factory=list)
     retrieved_results: list[SearchResult] = field(default_factory=list)
     evidence_bundle: EvidenceBundle | None = None
+    evidence_judgments: list[EvidenceJudgment] = field(default_factory=list)
     rag_context: RAGContext | None = None
     answer: AgentAnswer | None = None
     verification: VerificationResult | None = None
@@ -88,6 +105,7 @@ class AgentState:
                 if self.evidence_bundle
                 else []
             ),
+            "evidence_judgments": [judgment.to_dict() for judgment in self.evidence_judgments],
             "answer": self.answer.to_dict() if self.answer else None,
             "verification": self.verification.to_dict() if self.verification else None,
             "llm_decisions": self.llm_decisions,
@@ -113,6 +131,7 @@ class AgentRunLog:
     status: str
     search_tasks: list[dict[str, Any]]
     sources: list[dict[str, Any]]
+    evidence_judgments: list[dict[str, Any]]
     answer: dict[str, Any] | None
     verification: dict[str, Any] | None
     llm_decisions: list[dict[str, Any]]

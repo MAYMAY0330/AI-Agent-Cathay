@@ -6,6 +6,7 @@ from agent.state import AgentAnswer
 from agent.tool_registry import AgentTool, ToolRegistry
 from agent.tools import (
     check_evidence_sufficiency,
+    judge_evidence_checklist,
     normalize_question,
     plan_search_tasks,
     select_evidence,
@@ -103,6 +104,21 @@ class AgentToolTests(unittest.TestCase):
             max_context_chars=1000,
         )
         self.assertFalse(check_evidence_sufficiency(weak_bundle).valid)
+
+    def test_judge_evidence_checklist_uses_binary_points(self) -> None:
+        bundle = select_evidence(
+            "資料共享是否需要告知客戶?",
+            [_result("chunk-1", 0.2)],
+            limit=1,
+            max_context_chars=1000,
+        )
+
+        judgments = judge_evidence_checklist("資料共享是否需要告知客戶?", bundle)
+
+        self.assertEqual(len(judgments), 1)
+        self.assertEqual(set(judgments[0].checklist.values()), {1})
+        self.assertEqual(judgments[0].score, 7)
+        self.assertEqual(judgments[0].classification, "strong")
 
     def test_verify_citations_catches_unknown_label(self) -> None:
         source_bundle = select_evidence(

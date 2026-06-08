@@ -125,6 +125,22 @@ def _print_human_output(state: AgentState, *, include_prompt: bool) -> None:
             f"chunk_id={source.chunk_id}"
         )
 
+    if state.evidence_judgments:
+        print("")
+        print("證據評分：")
+        for judgment in state.evidence_judgments:
+            checklist = ", ".join(
+                f"{key}={value}" for key, value in judgment.checklist.items()
+            )
+            print(
+                f"[{judgment.label}] {judgment.score}/{judgment.max_score} "
+                f"{judgment.classification} mode={judgment.mode}"
+            )
+            print(f"  checklist: {checklist}")
+            if judgment.supporting_quote:
+                print(f"  quote: {judgment.supporting_quote}")
+            print(f"  reason: {judgment.reason}")
+
     if state.verification:
         print("")
         print("驗證：")

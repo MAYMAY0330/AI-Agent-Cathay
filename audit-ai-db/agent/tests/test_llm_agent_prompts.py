@@ -59,7 +59,13 @@ class LlmAgentPromptTests(unittest.TestCase):
 
         self.assertEqual(
             EVIDENCE_JUDGE_RESPONSE_SCHEMA["required"],
-            ["is_sufficient", "reason", "supporting_labels", "refined_query"],
+            ["is_sufficient", "reason", "supporting_labels", "refined_query", "judgments"],
+        )
+        judgment = EVIDENCE_JUDGE_RESPONSE_SCHEMA["properties"]["judgments"]["items"]
+        self.assertIn("checklist", judgment["required"])
+        self.assertEqual(
+            judgment["properties"]["checklist"]["properties"]["direct_answer"]["enum"],
+            [0, 1],
         )
 
 

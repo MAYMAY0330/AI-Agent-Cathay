@@ -91,6 +91,7 @@ def _build_run_log(state: AgentState, *, dry_run: bool) -> AgentRunLog:
         status=state.status,
         search_tasks=[task.to_dict() for task in state.search_tasks],
         sources=sources,
+        evidence_judgments=[judgment.to_dict() for judgment in state.evidence_judgments],
         answer=state.answer.to_dict() if state.answer else None,
         verification=state.verification.to_dict() if state.verification else None,
         llm_decisions=state.llm_decisions,

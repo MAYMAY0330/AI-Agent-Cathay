@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from agent.llm_agent.prompts import build_evidence_judge_prompt, build_planner_prompt
-from agent.state import EvidenceBundle, SearchTask, VerificationResult
+from agent.state import EvidenceBundle, EvidenceJudgment, SearchTask, VerificationResult
 from ingestion.gemini.reader import create_gemini_model, load_gemini_settings
 
 
@@ -46,8 +46,45 @@ EVIDENCE_JUDGE_RESPONSE_SCHEMA: dict[str, Any] = {
             "items": {"type": "string"},
         },
         "refined_query": {"type": "string"},
+        "judgments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "label": {"type": "string"},
+                    "checklist": {
+                        "type": "object",
+                        "properties": {
+                            "direct_answer": {"type": "integer", "enum": [0, 1]},
+                            "key_concepts": {"type": "integer", "enum": [0, 1]},
+                            "concrete_rule": {"type": "integer", "enum": [0, 1]},
+                            "citation_metadata": {"type": "integer", "enum": [0, 1]},
+                            "authoritative_source": {"type": "integer", "enum": [0, 1]},
+                            "current_source": {"type": "integer", "enum": [0, 1]},
+                            "no_obvious_mismatch": {"type": "integer", "enum": [0, 1]},
+                        },
+                        "required": [
+                            "direct_answer",
+                            "key_concepts",
+                            "concrete_rule",
+                            "citation_metadata",
+                            "authoritative_source",
+                            "current_source",
+                            "no_obvious_mismatch",
+                        ],
+                    },
+                    "classification": {
+                        "type": "string",
+                        "enum": ["strong", "supporting", "background", "irrelevant", "conflicting"],
+                    },
+                    "reason": {"type": "string"},
+                    "supporting_quote": {"type": "string"},
+                },
+                "required": ["label", "checklist", "classification", "reason", "supporting_quote"],
+            },
+        },
     },
-    "required": ["is_sufficient", "reason", "supporting_labels", "refined_query"],
+    "required": ["is_sufficient", "reason", "supporting_labels", "refined_query", "judgments"],
 }
 
 
@@ -134,11 +171,17 @@ def judge_evidence_with_llm(
         source_labels = {source.label for source in bundle.sources}
         supporting_labels = [label for label in supporting_labels if label in source_labels]
         refined_query = str(payload.get("refined_query") or "").strip()
+        judgments = _coerce_evidence_judgments(
+            payload.get("judgments"),
+            bundle=bundle,
+            mode="llm",
+        )
         return {
             "is_sufficient": is_sufficient,
             "reason": str(payload.get("reason") or ""),
             "supporting_labels": supporting_labels,
             "refined_query": refined_query,
+            "judgments": judgments,
             "mode": "llm",
             "raw": payload,
         }
@@ -148,6 +191,7 @@ def judge_evidence_with_llm(
             "reason": f"LLM evidence judge failed; used deterministic result. error={exc}",
             "supporting_labels": [source.label for source in bundle.sources],
             "refined_query": "",
+            "judgments": [],
             "mode": "fallback",
         }
 
@@ -223,3 +267,66 @@ def _task_purpose(index: int, iteration: int) -> str:
 def _clean_filters(filters: dict[str, Any]) -> dict[str, Any]:
     allowed = {"document_type", "status", "source_system", "language"}
     return {key: value for key, value in filters.items() if key in allowed and value}
+
+
+def _coerce_evidence_judgments(
+    raw_judgments: Any,
+    *,
+    bundle: EvidenceBundle,
+    mode: str,
+) -> list[EvidenceJudgment]:
+    if not isinstance(raw_judgments, list):
+        return []
+    sources_by_label = {source.label: source for source in bundle.sources}
+    judgments: list[EvidenceJudgment] = []
+    for raw in raw_judgments:
+        if not isinstance(raw, dict):
+            continue
+        label = str(raw.get("label") or "").strip()
+        source = sources_by_label.get(label)
+        if source is None:
+            continue
+        checklist = _coerce_checklist(raw.get("checklist"))
+        score = sum(checklist.values())
+        judgments.append(
+            EvidenceJudgment(
+                label=label,
+                chunk_id=source.chunk_id,
+                checklist=checklist,
+                score=score,
+                max_score=len(checklist),
+                classification=_coerce_classification(raw.get("classification"), score),
+                reason=str(raw.get("reason") or ""),
+                supporting_quote=str(raw.get("supporting_quote") or "")[:500],
+                mode=mode,
+            )
+        )
+    return judgments
+
+
+def _coerce_checklist(raw_checklist: Any) -> dict[str, int]:
+    keys = [
+        "direct_answer",
+        "key_concepts",
+        "concrete_rule",
+        "citation_metadata",
+        "authoritative_source",
+        "current_source",
+        "no_obvious_mismatch",
+    ]
+    raw = raw_checklist if isinstance(raw_checklist, dict) else {}
+    return {key: 1 if raw.get(key) == 1 else 0 for key in keys}
+
+
+def _coerce_classification(raw_classification: Any, score: int) -> str:
+    value = str(raw_classification or "").strip()
+    allowed = {"strong", "supporting", "background", "irrelevant", "conflicting"}
+    if value in allowed:
+        return value
+    if score >= 6:
+        return "strong"
+    if score >= 4:
+        return "supporting"
+    if score >= 2:
+        return "background"
+    return "irrelevant"

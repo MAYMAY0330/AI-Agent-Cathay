@@ -13,6 +13,7 @@ from agent.llm_agent.decisions import (
 from agent.state import (
     AgentAnswer,
     AgentRunLog,
+    EvidenceJudgment,
     EvidenceBundle,
     SearchTask,
     VerificationResult,
@@ -233,6 +234,61 @@ def check_evidence_sufficiency(
     return VerificationResult(valid=True, reason="Evidence is sufficient for answer generation.")
 
 
+def judge_evidence_checklist(
+    question: str,
+    bundle: EvidenceBundle,
+) -> list[EvidenceJudgment]:
+    judgments: list[EvidenceJudgment] = []
+    question_keywords = _keyword_phrases(question)
+    for source in bundle.sources:
+        checklist = _score_source_checklist(question, question_keywords, source)
+        score = sum(checklist.values())
+        judgments.append(
+            EvidenceJudgment(
+                label=source.label,
+                chunk_id=source.chunk_id,
+                checklist=checklist,
+                score=score,
+                max_score=len(checklist),
+                classification=_classify_checklist_score(score, checklist),
+                reason=_checklist_reason(checklist, source),
+                supporting_quote=_supporting_quote(question_keywords, source.text),
+                mode="deterministic",
+            )
+        )
+    return judgments
+
+
+def apply_evidence_judgments(
+    bundle: EvidenceBundle,
+    judgments: list[EvidenceJudgment],
+) -> EvidenceBundle:
+    if not judgments:
+        return bundle
+
+    judgment_by_chunk = {judgment.chunk_id: judgment for judgment in judgments}
+
+    def sort_key(result: SearchResult) -> tuple[int, int, float, int]:
+        judgment = judgment_by_chunk.get(result.chunk_id)
+        direct = judgment.checklist.get("direct_answer", 0) if judgment else 0
+        checklist_score = judgment.score if judgment else 0
+        return (direct, checklist_score, result.score, -result.chunk_index)
+
+    selected_results = sorted(bundle.selected_results, key=sort_key, reverse=True)
+    rebuilt_context = build_rag_context(
+        "",
+        selected_results,
+        max_sources=len(bundle.sources),
+        max_context_chars=sum(len(source.text) for source in bundle.sources) or 1,
+        preserve_order=True,
+    )
+    return EvidenceBundle(
+        sources=rebuilt_context.sources,
+        selected_results=selected_results,
+        all_results_count=bundle.all_results_count,
+    )
+
+
 def build_answer_context(
     question: str,
     bundle: EvidenceBundle,
@@ -434,6 +490,36 @@ def build_tool_registry(
             input_schema=_object_schema(["bundle"], {"bundle": {"type": "object"}}),
             output_schema={},
             callable=lambda payload: check_evidence_sufficiency(payload["bundle"]),
+        )
+    )
+    registry.register(
+        AgentTool(
+            name="judge_evidence_checklist",
+            description="Score selected evidence with an auditable binary checklist.",
+            input_schema=_object_schema(
+                ["question", "bundle"],
+                {"question": {"type": "string"}, "bundle": {"type": "object"}},
+            ),
+            output_schema={},
+            callable=lambda payload: judge_evidence_checklist(
+                payload["question"],
+                payload["bundle"],
+            ),
+        )
+    )
+    registry.register(
+        AgentTool(
+            name="apply_evidence_judgments",
+            description="Rerank selected evidence by checklist judgments.",
+            input_schema=_object_schema(
+                ["bundle", "judgments"],
+                {"bundle": {"type": "object"}, "judgments": {"type": "array"}},
+            ),
+            output_schema={},
+            callable=lambda payload: apply_evidence_judgments(
+                payload["bundle"],
+                payload["judgments"],
+            ),
         )
     )
     registry.register(
@@ -643,6 +729,129 @@ def _has_chunk_evidence(result: SearchResult) -> bool:
 
 def _source_has_direct_evidence(match_sources: list[str]) -> bool:
     return any(source in match_sources for source in ("keyword", "vector", "metadata_chunk"))
+
+
+def _score_source_checklist(
+    question: str,
+    question_keywords: list[str],
+    source: Any,
+) -> dict[str, int]:
+    text = str(source.text or "")
+    metadata = " ".join(
+        str(value)
+        for value in (
+            source.title,
+            source.document_type,
+            source.section_title or "",
+            source.heading_path or "",
+            source.clause_number or "",
+        )
+        if value
+    )
+    haystack = f"{metadata} {text}"
+    key_concepts = _matched_keyword_count(question_keywords, haystack)
+    direct_markers = ("應", "須", "需要", "不得", "得", "同意", "告知", "始得", "應於事前")
+    concrete_markers = (
+        "條",
+        "辦法",
+        "規定",
+        "應",
+        "不得",
+        "始得",
+        "同意",
+        "告知",
+        "例外",
+        "程序",
+        "法務室意見",
+    )
+    mismatch = _has_obvious_mismatch(question, text)
+    return {
+        "direct_answer": 1 if key_concepts >= 1 and _has_direct_answer_marker(question, text, direct_markers) and not mismatch else 0,
+        "key_concepts": 1 if key_concepts > 0 else 0,
+        "concrete_rule": 1 if any(marker in haystack for marker in concrete_markers) else 0,
+        "citation_metadata": 1 if bool(source.title and (source.section_title or source.heading_path or source.clause_number or source.page_start)) else 0,
+        "authoritative_source": 1 if source.document_type in {"legal_opinion", "internal_rule", "policy_guideline"} else 0,
+        "current_source": 1,
+        "no_obvious_mismatch": 0 if mismatch else 1,
+    }
+
+
+def _matched_keyword_count(question_keywords: list[str], haystack: str) -> int:
+    return sum(1 for keyword in question_keywords if keyword and keyword in haystack)
+
+
+def _has_obvious_mismatch(question: str, text: str) -> bool:
+    mismatch_pairs = [
+        ("資料共享", "AI"),
+        ("告知", "申訴"),
+        ("同意", "申訴"),
+        ("上線", "資料共享"),
+    ]
+    for question_marker, text_marker in mismatch_pairs:
+        if question_marker in question and text_marker in text and question_marker not in text:
+            return True
+    return False
+
+
+def _has_direct_answer_marker(
+    question: str,
+    text: str,
+    direct_markers: tuple[str, ...],
+) -> bool:
+    if "客戶" in question and "告知" in question and not any(
+        term in text
+        for term in (
+            "告知客戶",
+            "客戶同意",
+            "取得客戶同意",
+            "徵得其同意",
+            "當事人同意",
+            "應告知事項",
+            "契據",
+        )
+    ):
+        return False
+    if "告知" in question and not any(term in text for term in ("告知", "同意", "應告知事項", "契據")):
+        return False
+    if "同意" in question and "同意" not in text:
+        return False
+    if "拒絕" in question and not any(term in text for term in ("拒絕", "停止", "註記")):
+        return False
+    if "風險" in question and "風險" not in text:
+        return False
+    return any(marker in text for marker in direct_markers)
+
+
+def _classify_checklist_score(score: int, checklist: dict[str, int]) -> str:
+    if score >= 6 and checklist.get("direct_answer") == 1:
+        return "strong"
+    if score >= 4:
+        return "supporting"
+    if score >= 2:
+        return "background"
+    return "irrelevant"
+
+
+def _checklist_reason(checklist: dict[str, int], source: Any) -> str:
+    passed = [key for key, value in checklist.items() if value == 1]
+    failed = [key for key, value in checklist.items() if value == 0]
+    return (
+        f"passed={','.join(passed) or '-'}; "
+        f"failed={','.join(failed) or '-'}; "
+        f"source={source.title}"
+    )
+
+
+def _supporting_quote(question_keywords: list[str], text: str, *, max_chars: int = 180) -> str:
+    clean = " ".join(text.split())
+    if not clean:
+        return ""
+    for keyword in question_keywords:
+        index = clean.find(keyword)
+        if index >= 0:
+            start = max(0, index - 40)
+            return clean[start : start + max_chars]
+    return clean[:max_chars]
 
 
 def _source_label(source: Any) -> str:

@@ -5,7 +5,7 @@ from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from agent.state import AgentAnswer, AgentState, VerificationResult
+from agent.state import AgentAnswer, AgentState, EvidenceJudgment, VerificationResult
 from agent.tool_registry import ToolRegistry
 
 
@@ -213,7 +213,16 @@ def _make_judge_evidence_node(
             {"bundle": state.evidence_bundle},
         )
         state.verification = deterministic
-        if llm_decisions and not dry_run and state.evidence_bundle is not None:
+        checklist_judgments = []
+        if state.evidence_bundle is not None:
+            checklist_judgments = registry.call_tool(
+                "judge_evidence_checklist",
+                {
+                    "question": state.normalized_question,
+                    "bundle": state.evidence_bundle,
+                },
+            )
+        if llm_decisions and state.evidence_bundle is not None:
             judgment = registry.call_tool(
                 "judge_evidence_llm",
                 {
@@ -228,23 +237,38 @@ def _make_judge_evidence_node(
                 **judgment,
             }
             state.llm_decisions.append(decision)
+            if judgment.get("judgments"):
+                checklist_judgments = list(judgment["judgments"])
             refined_query = str(judgment.get("refined_query") or "").strip()
             if refined_query and not judgment.get("is_sufficient"):
                 state.refined_queries.append(refined_query)
-            if deterministic.valid:
-                if judgment.get("is_sufficient"):
-                    labels = list(judgment.get("supporting_labels") or [])
-                    state.verification = VerificationResult(
-                        valid=True,
-                        cited_labels=labels,
-                        reason=str(judgment.get("reason") or "LLM judged evidence sufficient."),
-                    )
-                else:
-                    state.verification = VerificationResult(
-                        valid=False,
-                        errors=["llm_evidence_insufficient"],
-                        reason=str(judgment.get("reason") or "LLM judged evidence insufficient."),
-                    )
+        else:
+            state.llm_decisions.append(
+                {
+                    "kind": "evidence_judge",
+                    "mode": "deterministic",
+                    "iteration": state.iterations,
+                    "reasoning": "LangGraph used deterministic checklist evidence judge.",
+                }
+            )
+
+        if state.evidence_bundle is not None and checklist_judgments:
+            state.evidence_bundle = registry.call_tool(
+                "apply_evidence_judgments",
+                {
+                    "bundle": state.evidence_bundle,
+                    "judgments": checklist_judgments,
+                },
+            )
+            state.evidence_judgments = _relabel_judgments(
+                checklist_judgments,
+                state.evidence_bundle,
+            )
+            checklist_verification = _verify_checklist_judgments(state.evidence_judgments)
+            if deterministic.valid and checklist_verification.valid:
+                state.verification = checklist_verification
+            else:
+                state.verification = checklist_verification if not checklist_verification.valid else deterministic
         return {"agent_state": state}
 
     return node
@@ -333,3 +357,62 @@ def _final_status(answer: AgentAnswer | None, verification: VerificationResult |
     if verification is not None and not verification.valid:
         return "failed_verification"
     return "answered"
+
+
+def _relabel_judgments(
+    judgments: list[EvidenceJudgment],
+    bundle,
+) -> list[EvidenceJudgment]:
+    label_by_chunk = {source.chunk_id: source.label for source in bundle.sources}
+    relabeled: list[EvidenceJudgment] = []
+    for judgment in judgments:
+        label = label_by_chunk.get(judgment.chunk_id, judgment.label)
+        relabeled.append(
+            EvidenceJudgment(
+                label=label,
+                chunk_id=judgment.chunk_id,
+                checklist=judgment.checklist,
+                score=judgment.score,
+                max_score=judgment.max_score,
+                classification=judgment.classification,
+                reason=judgment.reason,
+                supporting_quote=judgment.supporting_quote,
+                mode=judgment.mode,
+            )
+        )
+    relabeled.sort(key=lambda judgment: _label_number(judgment.label))
+    return relabeled
+
+
+def _verify_checklist_judgments(judgments: list[EvidenceJudgment]) -> VerificationResult:
+    strong_labels = [
+        judgment.label
+        for judgment in judgments
+        if judgment.classification == "strong"
+        and judgment.checklist.get("direct_answer") == 1
+    ]
+    if strong_labels:
+        return VerificationResult(
+            valid=True,
+            cited_labels=strong_labels,
+            reason=f"Checklist evidence judge found strong support: {','.join(strong_labels)}.",
+        )
+    if not judgments:
+        return VerificationResult(
+            valid=False,
+            errors=["no_evidence_judgments"],
+            reason="No evidence checklist judgments were available.",
+        )
+    best = max(judgments, key=lambda judgment: judgment.score)
+    return VerificationResult(
+        valid=False,
+        errors=["no_strong_evidence"],
+        reason=f"No source passed as strong direct evidence. Best={best.label} score={best.score}/{best.max_score}.",
+    )
+
+
+def _label_number(label: str) -> int:
+    try:
+        return int(label.removeprefix("S"))
+    except ValueError:
+        return 10_000

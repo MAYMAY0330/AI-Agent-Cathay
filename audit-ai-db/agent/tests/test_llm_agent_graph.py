@@ -3,11 +3,13 @@ from __future__ import annotations
 import unittest
 
 from agent.llm_agent.graph_workflow import run_agent_graph
-from agent.state import AgentAnswer, AgentState, SearchTask
+from agent.state import AgentAnswer, AgentState, EvidenceJudgment, SearchTask
 from agent.tool_registry import AgentTool, ToolRegistry
 from agent.tools import (
+    apply_evidence_judgments,
     build_answer_context,
     check_evidence_sufficiency,
+    judge_evidence_checklist,
     normalize_question,
     select_evidence,
     verify_citations,
@@ -42,6 +44,7 @@ class LlmAgentGraphTests(unittest.TestCase):
         self.assertEqual(result.iterations, 1)
         self.assertEqual(result.search_tasks[0].task_id, "llm_search_1_1")
         self.assertEqual([decision["kind"] for decision in result.llm_decisions], ["planner", "evidence_judge"])
+        self.assertEqual(result.evidence_judgments[0].score, 7)
 
 
 def _fake_registry() -> ToolRegistry:
@@ -99,12 +102,43 @@ def _fake_registry() -> ToolRegistry:
     )
     _register(
         registry,
+        "judge_evidence_checklist",
+        lambda payload: judge_evidence_checklist(payload["question"], payload["bundle"]),
+    )
+    _register(
+        registry,
+        "apply_evidence_judgments",
+        lambda payload: apply_evidence_judgments(payload["bundle"], payload["judgments"]),
+    )
+    _register(
+        registry,
         "judge_evidence_llm",
         lambda payload: {
             "is_sufficient": True,
             "reason": "test judge",
             "supporting_labels": ["S1"],
             "refined_query": "",
+            "judgments": [
+                EvidenceJudgment(
+                    label="S1",
+                    chunk_id="chunk-1",
+                    checklist={
+                        "direct_answer": 1,
+                        "key_concepts": 1,
+                        "concrete_rule": 1,
+                        "citation_metadata": 1,
+                        "authoritative_source": 1,
+                        "current_source": 1,
+                        "no_obvious_mismatch": 1,
+                    },
+                    score=7,
+                    max_score=7,
+                    classification="strong",
+                    reason="test checklist",
+                    supporting_quote="資料共享依法應取得客戶同意",
+                    mode="llm",
+                )
+            ],
             "mode": "llm",
         },
     )
