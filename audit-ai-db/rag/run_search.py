@@ -48,6 +48,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include vector similarity search in the hybrid result set.",
     )
     parser.add_argument(
+        "--agentic",
+        action="store_true",
+        help="Ask the small search agent to add validated expansion queries.",
+    )
+    parser.add_argument(
+        "--max-agentic-queries",
+        type=int,
+        default=3,
+        help="Maximum extra queries from the small search agent. Default: 3",
+    )
+    parser.add_argument(
         "--vector-only",
         action="store_true",
         help="Use vector similarity search only.",
@@ -87,7 +98,9 @@ def main(argv: list[str] | None = None) -> int:
             include_keyword=not args.metadata_only and not args.vector_only,
             include_metadata=not args.keyword_only and not args.vector_only,
             include_vector=args.vector or args.vector_only,
+            include_agentic=args.agentic,
             embedding_model=args.embedding_model,
+            max_agentic_queries=args.max_agentic_queries,
         )
     except IngestionError as exc:
         print(f"FAILED stage={exc.stage} error={exc.message}", file=sys.stderr)

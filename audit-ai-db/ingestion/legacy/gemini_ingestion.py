@@ -7,23 +7,27 @@ from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from ingestion import db_writer, logger, version_checker
 from ingestion.checksum import generate_file_checksum
-from ingestion.claude_chunker import chunk_markdown_with_claude
-from ingestion.claude_reader import ClaudeTokenUsage, PageAnalysis, read_document_with_claude
 from ingestion.config import DBConfig
 from ingestion.file_loader import load_file
+from ingestion.gemini.chunker import chunk_markdown_with_gemini
+from ingestion.gemini.reader import (
+    GeminiTokenUsage,
+    PageAnalysis,
+    read_document_with_gemini,
+)
 from ingestion.legacy.local_ingestion import _try_log_failure
 from ingestion.metadata_extractor import prepare_metadata
 from ingestion.models import DocumentMetadata, FileInfo, IngestionError
 
 
-def run_claude_ingestion(
+def run_gemini_ingestion(
     raw_metadata: dict[str, Any],
     *,
-    output_dir: str = "data/processed/claude_pipeline",
+    output_dir: str = "data/processed/gemini_pipeline",
     max_pages: int | None = None,
     vision_mode: str = "minimal",
     max_vision_pages: int | None = None,
@@ -31,7 +35,7 @@ def run_claude_ingestion(
 ) -> dict[str, Any]:
     if max_pages is not None and not no_db:
         raise IngestionError(
-            "claude_configuration",
+            "gemini_configuration",
             "--max-pages can only be used with --no-db to avoid partial database ingestion",
         )
 
@@ -78,7 +82,7 @@ def run_claude_ingestion(
                 return {
                     "status": "skipped_duplicate",
                     "stage": "version_check",
-                    "pipeline": "claude",
+                    "pipeline": "gemini",
                     "document_id": str(decision.document_id),
                     "version_id": str(decision.current_version_id),
                     "total_chunks": 0,
@@ -86,8 +90,8 @@ def run_claude_ingestion(
         else:
             decision = None
 
-        current_stage = "claude_reading"
-        read_result = read_document_with_claude(
+        current_stage = "gemini_reading"
+        read_result = read_document_with_gemini(
             file_info.file_path,
             file_info.file_type,
             output_root,
@@ -98,8 +102,8 @@ def run_claude_ingestion(
         )
         _write_page_analysis(output_root, output_name, read_result.page_analysis)
 
-        current_stage = "claude_chunking"
-        chunks, summary, chunks_path, chunk_usage = chunk_markdown_with_claude(
+        current_stage = "gemini_chunking"
+        chunks, summary, chunks_path, chunk_usage = chunk_markdown_with_gemini(
             read_result.markdown,
             metadata,
             output_root,
@@ -112,13 +116,13 @@ def run_claude_ingestion(
         if no_db:
             return {
                 "status": "parsed_no_db",
-                "stage": "claude_chunking",
-                "pipeline": "claude",
+                "stage": "gemini_chunking",
+                "pipeline": "gemini",
                 "markdown_path": str(read_result.output_markdown_path),
                 "chunks_path": str(chunks_path),
                 "total_chunks": len(chunks),
                 "summary_generated": summary.summary_generated,
-                "claude_calls": usage_summary["claude_calls"],
+                "gemini_calls": usage_summary["gemini_calls"],
                 "input_tokens": usage_summary["input_tokens"],
                 "output_tokens": usage_summary["output_tokens"],
                 "total_tokens": usage_summary["total_tokens"],
@@ -165,14 +169,14 @@ def run_claude_ingestion(
         return {
             "status": "success",
             "stage": "stored_in_db",
-            "pipeline": "claude",
+            "pipeline": "gemini",
             "document_id": str(document_id),
             "version_id": str(version_id),
             "markdown_path": str(read_result.output_markdown_path),
             "chunks_path": str(chunks_path),
             "total_chunks": total_chunks,
             "summary_generated": summary.summary_generated,
-            "claude_calls": usage_summary["claude_calls"],
+            "gemini_calls": usage_summary["gemini_calls"],
             "input_tokens": usage_summary["input_tokens"],
             "output_tokens": usage_summary["output_tokens"],
             "total_tokens": usage_summary["total_tokens"],
@@ -236,7 +240,7 @@ def _write_page_analysis(
 def _write_token_usage(
     output_root: Path,
     title: str,
-    usage: list[ClaudeTokenUsage],
+    usage: list[GeminiTokenUsage],
 ) -> Path:
     path = output_root / "token_usage" / f"{_safe_name(title)}.usage.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -248,9 +252,9 @@ def _write_token_usage(
     return path
 
 
-def _summarize_token_usage(usage: list[ClaudeTokenUsage]) -> dict[str, int]:
+def _summarize_token_usage(usage: list[GeminiTokenUsage]) -> dict[str, int]:
     return {
-        "claude_calls": len(usage),
+        "gemini_calls": len(usage),
         "input_tokens": sum(entry.input_tokens for entry in usage),
         "output_tokens": sum(entry.output_tokens for entry in usage),
         "total_tokens": sum(entry.total_tokens for entry in usage),
@@ -269,7 +273,9 @@ def _safe_name(value: str) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Ingest one local PDF/DOCX through the Claude parsing path."
+        description=(
+            "Legacy Gemini-only ingestion. Prefer: python -m ingestion.run_hybrid_ingestion"
+        )
     )
     parser.add_argument("file_path", help="Local .pdf or .docx file path")
     parser.add_argument("--internal-code")
@@ -278,15 +284,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-type")
     parser.add_argument("--title")
     parser.add_argument("--source-url")
-    parser.add_argument("--source-system", default="claude_ingestion")
+    parser.add_argument("--source-system", default="gemini_ingestion")
     parser.add_argument("--source-record-id")
     parser.add_argument("--responsible-unit")
     parser.add_argument("--system-category")
     parser.add_argument("--status", default="active")
     parser.add_argument(
         "--output-dir",
-        default="data/processed/claude_pipeline",
-        help="Where Markdown, page analysis, and Claude chunks JSON are written.",
+        default="data/processed/gemini_pipeline",
+        help="Where Markdown, page analysis, and Gemini chunks JSON are written.",
     )
     parser.add_argument(
         "--max-pages",
@@ -298,19 +304,19 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["minimal", "full", "off"],
         default="minimal",
         help=(
-            "PDF Vision routing. minimal sends only image-only pages to Claude; "
-            "full also sends mixed text+image pages; off never sends PDF pages to Claude."
+            "PDF Vision routing. minimal sends only image-only pages to Gemini; "
+            "full also sends mixed text+image pages; off never sends PDF pages to Gemini."
         ),
     )
     parser.add_argument(
         "--max-vision-pages-per-file",
         type=int,
-        help="Skip a PDF if more than this many pages would need Claude Vision.",
+        help="Skip a PDF if more than this many pages would need Gemini Vision.",
     )
     parser.add_argument(
         "--no-db",
         action="store_true",
-        help="Parse with Claude and write Markdown/JSON only; do not write PostgreSQL.",
+        help="Parse with Gemini and write Markdown/JSON only; do not write PostgreSQL.",
     )
     return parser
 
@@ -326,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
     no_db = raw_metadata.pop("no_db")
 
     try:
-        result = run_claude_ingestion(
+        result = run_gemini_ingestion(
             raw_metadata,
             output_dir=output_dir,
             max_pages=max_pages,
@@ -339,7 +345,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(
-        "CLAUDE_INGESTION_RESULT "
+        "GEMINI_INGESTION_RESULT "
         + " ".join(f"{key}={value}" for key, value in result.items())
     )
     return 0

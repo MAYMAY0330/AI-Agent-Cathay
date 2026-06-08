@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from rag.agentic_search import search_agentic
 from rag.keyword_search import search_chunks
 from rag.metadata_search import search_metadata
 from rag.search_models import SearchFilters, SearchResult
@@ -15,7 +16,9 @@ def hybrid_search(
     include_keyword: bool = True,
     include_metadata: bool = True,
     include_vector: bool = False,
+    include_agentic: bool = False,
     embedding_model: str | None = None,
+    max_agentic_queries: int = 3,
 ) -> list[SearchResult]:
     filters = filters or SearchFilters()
     candidates: list[SearchResult] = []
@@ -49,6 +52,20 @@ def hybrid_search(
                 **vector_kwargs,
             )
         )
+    if include_agentic:
+        candidates.extend(
+            search_agentic(
+                conn,
+                query,
+                limit=max(limit * 2, limit),
+                filters=filters,
+                include_keyword=include_keyword,
+                include_metadata=include_metadata,
+                include_vector=include_vector,
+                embedding_model=embedding_model,
+                max_queries=max_agentic_queries,
+            )
+        )
 
     merged = _merge_results(candidates)
     _recompute_hybrid_scores(merged)
@@ -70,8 +87,9 @@ def _merge_results(results: list[SearchResult]) -> list[SearchResult]:
 def _recompute_hybrid_scores(results: list[SearchResult]) -> None:
     weights = {
         "vector_score": 0.50,
-        "keyword_score": 0.40,
+        "keyword_score": 0.35,
         "metadata_score": 0.10,
+        "agentic_score": 0.15,
     }
     for result in results:
         weighted_total = 0.0
@@ -88,7 +106,7 @@ def _recompute_hybrid_scores(results: list[SearchResult]) -> None:
 
         overlap_count = sum(
             1
-            for source in ("keyword", "metadata", "vector")
+            for source in ("keyword", "metadata", "vector", "agentic")
             if source in result.match_sources
         )
         if overlap_count >= 2:

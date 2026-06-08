@@ -6,6 +6,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from agent.llm_agent.decisions import (
+    judge_evidence_with_llm,
+    plan_search_tasks_with_llm as plan_search_tasks_with_llm_decision,
+)
 from agent.state import (
     AgentAnswer,
     AgentRunLog,
@@ -106,12 +110,40 @@ def plan_search_tasks(
     return tasks
 
 
+def plan_search_tasks_with_llm(
+    normalized_question: str,
+    *,
+    keywords: list[str] | None = None,
+    limit: int = 6,
+    filters: dict[str, Any] | None = None,
+    iteration: int = 1,
+    refined_query: str | None = None,
+) -> dict[str, Any]:
+    fallback = plan_search_tasks(
+        refined_query or normalized_question,
+        keywords=keywords,
+        limit=limit,
+        filters=filters,
+        iteration=iteration,
+    )
+    return plan_search_tasks_with_llm_decision(
+        normalized_question,
+        keywords=keywords or [],
+        limit=limit,
+        filters=filters or {},
+        iteration=iteration,
+        refined_query=refined_query,
+        fallback_tasks=fallback,
+    )
+
+
 def retrieve_evidence(
     conn,
     task: SearchTask,
     *,
     include_vector: bool,
     embedding_model: str | None,
+    include_agentic: bool = False,
 ) -> list[SearchResult]:
     filters = SearchFilters(
         document_type=task.filters.get("document_type"),
@@ -125,6 +157,7 @@ def retrieve_evidence(
         limit=max(task.limit * 3, task.limit),
         filters=filters,
         include_vector=include_vector,
+        include_agentic=include_agentic,
         embedding_model=embedding_model,
     )
 
@@ -288,6 +321,7 @@ def build_tool_registry(
     embedding_model: str | None,
     dry_run: bool,
     log_dir: Path,
+    include_agentic: bool = False,
 ) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
@@ -332,6 +366,32 @@ def build_tool_registry(
     )
     registry.register(
         AgentTool(
+            name="plan_search_tasks_llm",
+            description="Ask the LLM to plan retrieval tasks, with deterministic fallback.",
+            input_schema=_object_schema(
+                ["normalized_question", "limit"],
+                {
+                    "normalized_question": {"type": "string"},
+                    "keywords": {"type": "array"},
+                    "filters": {"type": "object"},
+                    "limit": {"type": "integer"},
+                    "iteration": {"type": "integer"},
+                    "refined_query": {"type": "string"},
+                },
+            ),
+            output_schema={},
+            callable=lambda payload: plan_search_tasks_with_llm(
+                payload["normalized_question"],
+                keywords=payload.get("keywords"),
+                limit=payload["limit"],
+                filters=payload.get("filters"),
+                iteration=payload.get("iteration", 1),
+                refined_query=payload.get("refined_query"),
+            ),
+        )
+    )
+    registry.register(
+        AgentTool(
             name="retrieve_evidence",
             description="Run hybrid retrieval against the PostgreSQL knowledge base.",
             input_schema=_object_schema(["task"], {"task": {"type": "object"}}),
@@ -340,6 +400,7 @@ def build_tool_registry(
                 conn,
                 _coerce_search_task(payload["task"]),
                 include_vector=include_vector,
+                include_agentic=include_agentic,
                 embedding_model=embedding_model,
             ),
         )
@@ -373,6 +434,26 @@ def build_tool_registry(
             input_schema=_object_schema(["bundle"], {"bundle": {"type": "object"}}),
             output_schema={},
             callable=lambda payload: check_evidence_sufficiency(payload["bundle"]),
+        )
+    )
+    registry.register(
+        AgentTool(
+            name="judge_evidence_llm",
+            description="Ask the LLM whether selected evidence answers the question.",
+            input_schema=_object_schema(
+                ["question", "bundle", "deterministic"],
+                {
+                    "question": {"type": "string"},
+                    "bundle": {"type": "object"},
+                    "deterministic": {"type": "object"},
+                },
+            ),
+            output_schema={},
+            callable=lambda payload: judge_evidence_with_llm(
+                payload["question"],
+                payload["bundle"],
+                deterministic=payload["deterministic"],
+            ),
         )
     )
     registry.register(

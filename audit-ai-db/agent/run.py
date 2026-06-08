@@ -27,9 +27,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--language")
     parser.add_argument("--status", default="active")
     parser.add_argument("--vector", action="store_true")
+    parser.add_argument(
+        "--agentic-search",
+        action="store_true",
+        help="Enable the small RAG search agent for extra validated search queries.",
+    )
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
     parser.add_argument("--max-context-chars", type=int, default=12000)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--no-llm-decisions",
+        action="store_true",
+        help="Disable Gemini planner/evidence judge and use deterministic decisions.",
+    )
     parser.add_argument("--json", action="store_true")
     parser.add_argument(
         "--log-dir",
@@ -53,8 +63,10 @@ def main(argv: list[str] | None = None) -> int:
             language=args.language,
             status=args.status,
             include_vector=args.vector,
+            include_agentic_search=args.agentic_search,
             embedding_model=args.embedding_model,
             dry_run=args.dry_run,
+            llm_decisions=not args.no_llm_decisions,
             log_dir=args.log_dir,
             max_context_chars=args.max_context_chars,
         )

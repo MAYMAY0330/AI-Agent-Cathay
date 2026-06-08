@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from agent.state import EvidenceBundle
+
+
+def build_planner_prompt(
+    question: str,
+    *,
+    keywords: list[str],
+    filters: dict[str, Any],
+    limit: int,
+    iteration: int,
+    refined_query: str | None,
+) -> str:
+    return "\n".join(
+        [
+            "# Role",
+            "You are the search planner for an internal audit/legal RAG agent.",
+            "You do not answer the user. You only design retrieval searches.",
+            "",
+            "# Situation",
+            "The user asks questions about internal audit, legal opinions, privacy, AI governance,",
+            "customer data sharing, and internal rules. Evidence lives in PostgreSQL document chunks.",
+            "Search queries should help retrieve source text that can later support cited answers.",
+            "",
+            "# Task",
+            "Create retrieval tasks that maximize the chance of finding directly relevant evidence.",
+            "If a refined query is provided from a previous evidence judgment, use it as the first search.",
+            "",
+            "# Search Rules",
+            "- Return at most 3 search tasks.",
+            "- Use Traditional Chinese search terms when the question is Chinese.",
+            "- Prefer precise legal/audit terms over broad conversational wording.",
+            "- Include synonyms only when they are likely to appear in internal documents.",
+            "- Do not plan searches outside the provided filters.",
+            "- Allowed filters: document_type, status, source_system, language.",
+            "",
+            "# Output Format",
+            "Return only valid JSON. Do not include markdown, comments, or extra text.",
+            "The JSON object must match this shape:",
+            "{",
+            '  "reasoning": "brief Traditional Chinese reason for the search strategy",',
+            '  "search_tasks": [',
+            '    {"query": "search query", "purpose": "direct_question"}',
+            "  ]",
+            "}",
+            "Allowed purpose values: direct_question, keyword_compaction, domain_expansion, retry_refinement.",
+            "",
+            "# Examples",
+            "Example 1 input:",
+            'question: "資料共享是否需要告知客戶?"',
+            'keywords: ["資料共享", "告知客戶", "客戶同意"]',
+            "Example 1 output:",
+            "{",
+            '  "reasoning": "問題聚焦資料共享之告知與同意義務，應搜尋管理辦法、個資告知事項與契據文件範圍。",',
+            '  "search_tasks": [',
+            '    {"query": "資料共享 個資告知事項 客戶同意", "purpose": "direct_question"},',
+            '    {"query": "資料共享 契據文件 官網 個資應告知事項", "purpose": "domain_expansion"},',
+            '    {"query": "客戶資料共享 管理辦法 告知 同意", "purpose": "keyword_compaction"}',
+            "  ]",
+            "}",
+            "",
+            "Example 2 input:",
+            'question: "涉及負面資訊共享時要注意什麼?"',
+            'keywords: ["負面資訊", "風險類資料", "必要查證"]',
+            "Example 2 output:",
+            "{",
+            '  "reasoning": "問題聚焦高影響資料與風險控制，應搜尋負面資訊、必要查證與強化保護措施。",',
+            '  "search_tasks": [',
+            '    {"query": "資料共享 負面資訊 必要查證 強化客戶資料保護措施", "purpose": "direct_question"},',
+            '    {"query": "風險類資料 洗錢防制 資料共享 揭露", "purpose": "domain_expansion"}',
+            "  ]",
+            "}",
+            "",
+            "# Current Input",
+            f"question: {question}",
+            f"keywords: {json.dumps(keywords, ensure_ascii=False)}",
+            f"filters: {json.dumps(_clean_prompt_filters(filters), ensure_ascii=False)}",
+            f"limit_per_task: {limit}",
+            f"iteration: {iteration}",
+            f"refined_query_from_previous_judgment: {refined_query or ''}",
+        ]
+    )
+
+
+def build_evidence_judge_prompt(question: str, bundle: EvidenceBundle) -> str:
+    return "\n".join(
+        [
+            "# Role",
+            "You are the evidence judge for an internal audit/legal RAG agent.",
+            "You do not write the final answer. You decide whether retrieved sources are enough.",
+            "",
+            "# Situation",
+            "The agent has selected candidate source chunks from internal documents.",
+            "A later answer generator may only cite these source labels, so your decision must be strict.",
+            "",
+            "# Task",
+            "Decide whether the selected sources directly answer the user's question.",
+            "If not sufficient, propose one better Traditional Chinese search query.",
+            "",
+            "# Judgment Rules",
+            "- Mark evidence sufficient only if at least one source directly supports the answer.",
+            "- Do not mark evidence sufficient just because sources are topically related.",
+            "- Prefer sources that state requirements, exceptions, obligations, or procedures.",
+            "- supporting_labels must only include labels present in the provided sources.",
+            "- refined_query must be empty when evidence is sufficient.",
+            "",
+            "# Output Format",
+            "Return only valid JSON. Do not include markdown, comments, or extra text.",
+            "The JSON object must match this shape:",
+            "{",
+            '  "is_sufficient": true,',
+            '  "reason": "brief Traditional Chinese explanation",',
+            '  "supporting_labels": ["S1"],',
+            '  "refined_query": ""',
+            "}",
+            "",
+            "# Examples",
+            "Example 1 input summary:",
+            'question: "資料共享是否需要告知客戶?"',
+            'source S1 says: "資料共享運用範圍應載明於客戶已簽署之契據文件及官網個資應告知事項。"',
+            "Example 1 output:",
+            "{",
+            '  "is_sufficient": true,',
+            '  "reason": "S1 直接說明資料共享運用範圍應載明於契據文件與官網個資告知事項，可支持需要告知客戶。",',
+            '  "supporting_labels": ["S1"],',
+            '  "refined_query": ""',
+            "}",
+            "",
+            "Example 2 input summary:",
+            'question: "資料共享是否需要告知客戶?"',
+            'source S1 only says: "AI 服務直接提供客戶使用時應揭露 AI 相關資訊。"',
+            "Example 2 output:",
+            "{",
+            '  "is_sufficient": false,',
+            '  "reason": "S1 僅涉及 AI 服務揭露，未直接回答資料共享之客戶告知義務。",',
+            '  "supporting_labels": [],',
+            '  "refined_query": "資料共享 個資告知事項 契據文件 官網 客戶同意"',
+            "}",
+            "",
+            "# Current Input",
+            f"question: {question}",
+            "",
+            "# Candidate Sources",
+            _format_sources(bundle),
+        ]
+    )
+
+
+def _format_sources(bundle: EvidenceBundle) -> str:
+    parts: list[str] = []
+    for source in bundle.sources:
+        parts.extend(
+            [
+                f"<source label=\"{source.label}\">",
+                f"title: {source.title}",
+                f"section: {source.section_title or source.heading_path or '-'}",
+                f"clause: {source.clause_number or '-'}",
+                f"score: {source.score:.4f}",
+                "text:",
+                source.text[:1200],
+                "</source>",
+                "",
+            ]
+        )
+    return "\n".join(parts).strip()
+
+
+def _clean_prompt_filters(filters: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"document_type", "status", "source_system", "language"}
+    return {key: value for key, value in filters.items() if key in allowed and value}

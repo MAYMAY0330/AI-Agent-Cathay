@@ -18,9 +18,9 @@ from ingestion.claude_chunker import (
 )
 from ingestion.config import DBConfig
 from ingestion.file_loader import load_file
+from ingestion.legacy.local_ingestion import _try_log_failure
 from ingestion.metadata_extractor import prepare_metadata
 from ingestion.models import DocumentMetadata, FileInfo, IngestionError, SummaryResult
-from ingestion.run_ingestion import _try_log_failure
 
 
 def write_claude_result_to_db(

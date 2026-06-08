@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from company_gemini_ingestion.gemini_reader import (
+from ingestion.gemini.reader import (
     create_gemini_model,
     load_gemini_settings,
 )
@@ -35,4 +35,3 @@ def generate_answer(context: RAGContext) -> RAGAnswer:
         return RAGAnswer(answer=str(text).strip(), model=model_name)
 
     return RAGAnswer(answer=str(response).strip(), model=model_name)
-

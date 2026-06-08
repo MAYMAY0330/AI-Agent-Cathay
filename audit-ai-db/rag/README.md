@@ -7,6 +7,7 @@ V1 combines:
 - chunk keyword/full-text search over `document_chunks`
 - trigram fuzzy matching for Chinese text without spaces
 - document metadata search over title, type, keywords, topics, summary, and source fields
+- optional agentic search expansion through a small Gemini search planner
 
 Run from `audit-ai-db/` after PostgreSQL is running and migrations are applied:
 
@@ -57,6 +58,25 @@ Run vector-only or true hybrid search:
 python -m rag.run_search "客戶資料共享是否需要客戶同意？" --vector-only --limit 5
 python -m rag.run_search "客戶資料共享是否需要客戶同意？" --vector --limit 5
 ```
+
+Add the small search agent when exact terms may miss formal document wording:
+
+```bash
+python -m rag.run_search "資料共享是否需要告知客戶？" --agentic --limit 5
+python -m rag.run_search "資料共享是否需要告知客戶？" --vector --agentic --limit 5
+```
+
+The search agent does not write SQL and does not read the database directly. It
+only returns validated JSON:
+
+```text
+queries
+filters
+reason
+```
+
+Python then runs the approved queries through keyword, metadata, and optional
+vector search.
 
 V3 adds grounded answer generation:
 

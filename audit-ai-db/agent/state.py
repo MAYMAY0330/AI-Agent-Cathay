@@ -67,6 +67,8 @@ class AgentState:
     rag_context: RAGContext | None = None
     answer: AgentAnswer | None = None
     verification: VerificationResult | None = None
+    llm_decisions: list[dict[str, Any]] = field(default_factory=list)
+    refined_queries: list[str] = field(default_factory=list)
     status: str = "initialized"
     iterations: int = 0
     started_at: str = ""
@@ -88,6 +90,8 @@ class AgentState:
             ),
             "answer": self.answer.to_dict() if self.answer else None,
             "verification": self.verification.to_dict() if self.verification else None,
+            "llm_decisions": self.llm_decisions,
+            "refined_queries": self.refined_queries,
             "status": self.status,
             "iterations": self.iterations,
             "started_at": self.started_at,
@@ -111,6 +115,8 @@ class AgentRunLog:
     sources: list[dict[str, Any]]
     answer: dict[str, Any] | None
     verification: dict[str, Any] | None
+    llm_decisions: list[dict[str, Any]]
+    refined_queries: list[str]
     iterations: int
     dry_run: bool
     model: str | None
