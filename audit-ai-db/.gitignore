@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 
 data/processed/rag_agent_eval.local.json
+data/processed/agent_runs/
