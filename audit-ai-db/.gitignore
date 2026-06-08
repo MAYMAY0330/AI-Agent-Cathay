@@ -4,3 +4,4 @@ __pycache__/
 .env
 .DS_Store
 
+data/processed/rag_agent_eval.local.json
