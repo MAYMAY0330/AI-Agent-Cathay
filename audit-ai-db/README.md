@@ -7,9 +7,11 @@ It currently includes:
 - Docker-based PostgreSQL with pgvector support
 - SQL migrations
 - sample document metadata
-- Python ingestion for local PDF and DOCX files
+- Python ingestion for local PDF and DOCX files, including a hybrid local/Gemini path
+- RAG retrieval v1 for keyword and metadata search over imported chunks
+- CLI guarded RAG agent workflow for cited answer generation
 
-It does not include embedding generation, RAG orchestration, agents, chatbot workflows, OCR, internal database crawling, or frontend code.
+It does not include chatbot workflows, OCR, internal database crawling, or frontend code.
 
 ## Requirements
 
@@ -112,18 +114,108 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Ingest one local DOCX or PDF:
+Ingest one local DOCX or PDF through the preferred hybrid path:
 
 ```bash
-python -m ingestion.run_ingestion \
-  "data/raw/example.docx" \
-  --internal-code "POLICY-AI-SERVICE-001" \
+python -m ingestion.run_hybrid_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "HYBRID-DOC-001" \
   --document-type "internal_rule" \
-  --source-system "internal_regulation_db" \
-  --language "zh-TW"
+  --source-system "hybrid_ingestion" \
+  --language "zh-TW" \
+  --strategy auto
+```
+
+The hybrid path auto-routes text-rich files locally and image-heavy PDFs through
+Gemini. To preview without writing PostgreSQL:
+
+```bash
+python -m ingestion.run_hybrid_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "HYBRID-TEST-001" \
+  --document-type "legal_opinion" \
+  --source-system "hybrid_test" \
+  --strategy auto \
+  --no-db \
+  --json
 ```
 
 See `ingestion/README.md` for the pipeline stages, duplicate/version behavior, and supported document types.
+
+## Run Retrieval Search
+
+After documents have been ingested into PostgreSQL, search imported chunks:
+
+```bash
+python -m rag.run_search "客戶資料共享是否需要客戶同意？" --limit 5
+```
+
+The retrieval layer combines chunk keyword/full-text search with document metadata search. It can also use vector search after chunk embeddings are generated, and an optional small search agent for query expansion:
+
+```bash
+python -m rag.run_search "資料共享是否需要告知客戶？" --vector --agentic
+```
+
+See `rag/README.md` for filters and output options.
+
+Preview a grounded RAG answer context without calling an LLM:
+
+```bash
+python -m rag.run_answer "客戶資料共享是否需要客戶同意？" --no-llm
+```
+
+On the company laptop, after setting `GEMINI_API_KEY`, generate an answer:
+
+```bash
+python -m rag.run_answer "客戶資料共享是否需要客戶同意？"
+```
+
+## Run Agent Workflow / 執行 Agent 工作流程
+
+The agent now uses the LangGraph LLM workflow by default. Gemini plans searches,
+judges evidence sufficiency, and writes cited answers, while Python tools handle
+retrieval, source selection, citation verification, and run logging.
+
+目前 agent 預設使用 LangGraph LLM 工作流程。Gemini 會負責規劃搜尋、判斷證據是否足夠、
+產生有引用來源的答案；Python 工具則負責資料庫檢索、來源挑選、citation 驗證與執行紀錄。
+
+Preview retrieval and context building without calling the final answer LLM:
+
+不呼叫最終答案 LLM，只預覽檢索與 context 組裝：
+
+```bash
+python -m agent.run "資料共享是否需要告知客戶？" --dry-run
+```
+
+The dry-run path still normalizes the question, plans search tasks, retrieves
+evidence, selects sources, builds answer context, verifies dry-run status, and
+writes JSONL run logs under `data/processed/agent_runs/`.
+
+`--dry-run` 仍會整理問題、規劃搜尋、檢索證據、挑選來源、組裝回答 context、驗證 dry-run
+狀態，並將 JSONL log 寫到 `data/processed/agent_runs/`。
+
+On the company laptop, after setting `GEMINI_API_KEY`, generate a cited answer
+with Gemini planner/evidence judgment:
+
+在公司電腦設定 `GEMINI_API_KEY` 後，可用 Gemini 規劃搜尋、判斷證據並產生有引用的答案：
+
+```bash
+python -m agent.run "資料共享是否需要告知客戶？" --vector
+```
+
+Enable agentic query expansion inside retrieval:
+
+```bash
+python -m agent.run "資料共享是否需要告知客戶？" --vector --agentic-search
+```
+
+For deterministic debugging, disable Gemini planner/evidence judgment:
+
+若要做 deterministic debug，可關閉 Gemini 規劃與證據判斷：
+
+```bash
+python -m agent.run "資料共享是否需要告知客戶？" --vector --no-llm-decisions
+```
 
 ## Tables
 

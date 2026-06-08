@@ -19,20 +19,85 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Run One Ingestion
+## Run One Hybrid Ingestion
 
 Start PostgreSQL and run the database migrations first. Then:
 
 ```bash
-python -m ingestion.run_ingestion \
-  "data/raw/example.docx" \
-  --internal-code "POLICY-AI-SERVICE-001" \
+python -m ingestion.run_hybrid_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "HYBRID-DOC-001" \
   --document-type "internal_rule" \
-  --source-system "internal_regulation_db" \
-  --language "zh-TW"
+  --source-system "hybrid_ingestion" \
+  --language "zh-TW" \
+  --strategy auto
 ```
 
-## Run Folder Test
+The hybrid entrypoint is the preferred ingestion path. It combines the local
+deterministic path and the Gemini path behind one shared pipeline:
+
+```text
+load file
+-> prepare metadata
+-> checksum + version check
+-> choose local or Gemini strategy
+-> read + chunk into common ChunkRecord objects
+-> write documents/document_versions/document_chunks
+-> write ingestion_logs
+```
+
+Use `--strategy auto` for normal work. It keeps text-rich DOCX/PDF files on the
+local path and routes image-heavy or low-text PDFs to Gemini.
+
+Preview without writing PostgreSQL:
+
+```bash
+python -m ingestion.run_hybrid_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "HYBRID-TEST-001" \
+  --document-type "legal_opinion" \
+  --source-system "hybrid_test" \
+  --strategy auto \
+  --no-db \
+  --json
+```
+
+Write to PostgreSQL after the preview looks good:
+
+```bash
+python -m ingestion.run_hybrid_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "HYBRID-DOC-001" \
+  --document-type "legal_opinion" \
+  --source-system "hybrid_ingestion" \
+  --strategy auto
+```
+
+Force one path when debugging:
+
+```bash
+python -m ingestion.run_hybrid_ingestion "data/raw/example.docx" --strategy local --no-db
+python -m ingestion.run_hybrid_ingestion "data/raw/example.pdf" --strategy gemini --no-db
+```
+
+Gemini artifacts from the hybrid path are written to:
+
+```text
+data/processed/hybrid_pipeline/
+├── markdown/
+├── page_analysis/
+├── page_images/
+├── chunks/
+├── chunk_raw/
+└── token_usage/
+```
+
+This path is graph-ready but does not build the knowledge graph yet. It preserves
+the metadata needed later for graph nodes and edges, including `chunk_level`,
+`source_structure_type`, `heading_path`, `section_title`, `clause_number`, and
+page ranges.
+
+## Run Hybrid Folder Ingestion
 
 Put real `.docx` and `.pdf` files into:
 
@@ -43,10 +108,11 @@ data/raw/
 Then run:
 
 ```bash
-python -m ingestion.run_folder data/raw
+python -m ingestion.run_folder data/raw --strategy auto
 ```
 
-The folder runner ingests supported files one by one and prints one result per file.
+The folder runner now uses the hybrid pipeline for supported files and prints
+one result per file, including the selected strategy.
 It skips unsupported files such as `.xlsx`.
 It also writes a CSV report to:
 
@@ -58,6 +124,12 @@ To preview what it will do without writing to PostgreSQL:
 
 ```bash
 python -m ingestion.run_folder data/raw --dry-run
+```
+
+To parse/chunk files without writing PostgreSQL:
+
+```bash
+python -m ingestion.run_folder data/raw --strategy auto --no-db
 ```
 
 To choose another report path:
@@ -72,12 +144,11 @@ The MVP infers document type from the filename:
 - names containing `使用說明`, `操作`, `平台`, `系統`, `工具`, `申請`, `Hadoop`, or `R語言` -> `system_manual`
 - all others -> `internal_rule`
 
-## Run Claude Ingestion Path
+## Legacy Claude Ingestion Path
 
-The Claude path is a second ingestion route for harder files, especially PDFs
-that the rule-based path cannot extract. It uses the official Anthropic API for
-page reading and chunk JSON generation, then writes through the same PostgreSQL
-tables as the rule-based path.
+The Claude path is kept as a legacy/debug route. The preferred path is now
+`ingestion.run_hybrid_ingestion`. Use Claude only when you intentionally want to
+compare providers or debug Claude-specific parsing.
 
 Add your API key to `.env`:
 
@@ -156,6 +227,54 @@ The Claude folder runner is cost-safe by default:
 - `--max-vision-pages-per-file 10` skips very large scanned PDFs instead of letting one file consume a large number of calls.
 - Use `--include-pdf-duplicates` only when you intentionally want to process both DOCX and PDF copies.
 - Use `--vision-mode full` only when image-heavy mixed pages must be read by Claude Vision.
+
+## Gemini Provider
+
+Do not commit the real key. On the company laptop, add it only to `.env`:
+
+```text
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-1.5-pro
+```
+
+Gemini reader/chunker code lives under `ingestion/gemini/` and is called through
+the hybrid pipeline. Force Gemini when debugging image-heavy PDFs:
+
+```bash
+python -m ingestion.run_hybrid_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "GEMINI-TEST-001" \
+  --document-type "legal_opinion" \
+  --source-system "gemini_test" \
+  --language "zh-TW" \
+  --max-pages 2 \
+  --no-db
+```
+
+If the Markdown and chunks JSON look good, run through hybrid without
+`--max-pages` and without `--no-db` to write into PostgreSQL:
+
+```bash
+python -m ingestion.run_hybrid_ingestion \
+  "data/raw/example.pdf" \
+  --internal-code "GEMINI-DOC-001" \
+  --document-type "legal_opinion" \
+  --source-system "gemini_ingestion" \
+  --language "zh-TW" \
+  --strategy gemini
+```
+
+Hybrid Gemini artifacts are written to:
+
+```text
+data/processed/hybrid_pipeline/
+├── markdown/
+├── page_analysis/
+├── page_images/
+├── chunks/
+├── chunk_raw/
+└── token_usage/
+```
 
 Supported document types for structure detection:
 

@@ -12,7 +12,7 @@ if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from ingestion.models import IngestionError
-from ingestion.run_ingestion import run_ingestion
+from ingestion.hybrid.pipeline import run_hybrid_ingestion
 
 
 SUPPORTED_EXTENSIONS = {".docx", ".pdf"}
@@ -26,6 +26,7 @@ class BatchResult:
     stage: str | None = None
     document_type: str | None = None
     internal_code: str | None = None
+    selected_strategy: str | None = None
     total_chunks: int = 0
     error_message: str | None = None
 
@@ -95,6 +96,11 @@ def run_folder_ingestion(
     source_system: str,
     language: str,
     internal_code_prefix: str,
+    strategy: str = "auto",
+    output_dir: str = "data/processed/hybrid_pipeline",
+    vision_mode: str = "minimal",
+    max_vision_pages: int | None = None,
+    no_db: bool = False,
     dry_run: bool = False,
 ) -> list[BatchResult]:
     folder = Path(folder_path).expanduser().resolve()
@@ -143,7 +149,14 @@ def run_folder_ingestion(
             continue
 
         try:
-            result = run_ingestion(metadata)
+            result = run_hybrid_ingestion(
+                metadata,
+                strategy=strategy,
+                output_dir=output_dir,
+                vision_mode=vision_mode,
+                max_vision_pages=max_vision_pages,
+                no_db=no_db,
+            )
             results.append(
                 BatchResult(
                     file_path=file_path,
@@ -151,6 +164,7 @@ def run_folder_ingestion(
                     stage=str(result.get("stage")),
                     document_type=metadata["document_type"],
                     internal_code=metadata["internal_code"],
+                    selected_strategy=str(result.get("selected_strategy") or ""),
                     total_chunks=int(result.get("total_chunks") or 0),
                 )
             )
@@ -177,6 +191,7 @@ def print_results(results: list[BatchResult]) -> None:
             f"status={result.status}",
             f"stage={result.stage}",
             f"type={result.document_type or '-'}",
+            f"strategy={result.selected_strategy or '-'}",
             f"chunks={result.total_chunks}",
             f"file={result.file_path.name}",
         ]
@@ -207,6 +222,7 @@ def write_report(results: list[BatchResult], report_path: str) -> Path:
                 "stage",
                 "document_type",
                 "internal_code",
+                "selected_strategy",
                 "total_chunks",
                 "error_message",
             ],
@@ -221,6 +237,7 @@ def write_report(results: list[BatchResult], report_path: str) -> Path:
                     "stage": result.stage or "",
                     "document_type": result.document_type or "",
                     "internal_code": result.internal_code or "",
+                    "selected_strategy": result.selected_strategy or "",
                     "total_chunks": result.total_chunks,
                     "error_message": result.error_message or "",
                 }
@@ -242,6 +259,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-system", default="folder_test")
     parser.add_argument("--language", default="zh-TW")
     parser.add_argument("--internal-code-prefix", default="BATCH")
+    parser.add_argument(
+        "--strategy",
+        choices=["auto", "local", "gemini"],
+        default="auto",
+        help="Hybrid strategy for supported files. Default: auto",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="data/processed/hybrid_pipeline",
+        help="Where hybrid/Gemini artifacts are written.",
+    )
+    parser.add_argument(
+        "--vision-mode",
+        choices=["minimal", "full", "off"],
+        default="minimal",
+        help="Gemini PDF Vision routing when hybrid selects Gemini.",
+    )
+    parser.add_argument(
+        "--max-vision-pages-per-file",
+        type=int,
+        help="Skip a PDF if more than this many pages would need Gemini Vision.",
+    )
+    parser.add_argument(
+        "--no-db",
+        action="store_true",
+        help="Parse/chunk supported files without writing PostgreSQL.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -270,6 +314,11 @@ def main(argv: list[str] | None = None) -> int:
             source_system=args.source_system,
             language=args.language,
             internal_code_prefix=args.internal_code_prefix,
+            strategy=args.strategy,
+            output_dir=args.output_dir,
+            vision_mode=args.vision_mode,
+            max_vision_pages=args.max_vision_pages_per_file,
+            no_db=args.no_db,
             dry_run=args.dry_run,
         )
     except IngestionError as exc:
