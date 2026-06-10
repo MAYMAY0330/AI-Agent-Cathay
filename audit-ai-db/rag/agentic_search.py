@@ -321,6 +321,7 @@ def _coerce_filters(raw_filters: Any, *, base_filters: SearchFilters) -> SearchF
         status=base_filters.status or clean.get("status"),
         source_system=base_filters.source_system or clean.get("source_system"),
         language=base_filters.language or clean.get("language"),
+        is_latest=base_filters.is_latest,
     )
 
 
@@ -388,4 +389,3 @@ def _filters_to_dict(filters: SearchFilters) -> dict[str, str]:
         }.items()
         if value
     }
-

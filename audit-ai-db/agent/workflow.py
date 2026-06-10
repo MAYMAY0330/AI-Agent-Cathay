@@ -11,6 +11,7 @@ from agent.tools import build_tool_registry
 from ingestion.config import DBConfig
 from ingestion.db_writer import connect
 from rag.embedding_client import DEFAULT_EMBEDDING_MODEL
+from rag.reranker import DEFAULT_RERANKER_MODEL
 
 
 def run_agent(
@@ -29,6 +30,9 @@ def run_agent(
     llm_decisions: bool = True,
     log_dir: Path = Path("data/processed/agent_runs"),
     max_context_chars: int = 12000,
+    rerank: bool = False,
+    reranker_model: str | None = DEFAULT_RERANKER_MODEL,
+    rerank_candidates: int = 30,
 ) -> AgentState:
     started_at = _now_iso()
     state = AgentState(
@@ -47,6 +51,9 @@ def run_agent(
             embedding_model=embedding_model,
             dry_run=dry_run,
             log_dir=log_dir,
+            rerank=rerank,
+            reranker_model=reranker_model,
+            rerank_candidates=rerank_candidates,
         )
 
         fixed_filters = {

@@ -5,7 +5,7 @@ from pathlib import Path
 from ingestion.models import FileInfo, IngestionError
 
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".xls", ".csv"}
 
 
 def load_file(file_path: str) -> FileInfo:
@@ -40,4 +40,3 @@ def load_file(file_path: str) -> FileInfo:
         file_size=file_size,
         file_type=extension.removeprefix("."),
     )
-

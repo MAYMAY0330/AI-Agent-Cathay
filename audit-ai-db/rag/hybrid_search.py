@@ -3,6 +3,7 @@ from __future__ import annotations
 from rag.agentic_search import search_agentic
 from rag.keyword_search import search_chunks
 from rag.metadata_search import search_metadata
+from rag.reranker import DEFAULT_RERANKER_MODEL, rerank_results
 from rag.search_models import SearchFilters, SearchResult
 from rag.vector_search import search_vectors
 
@@ -19,16 +20,20 @@ def hybrid_search(
     include_agentic: bool = False,
     embedding_model: str | None = None,
     max_agentic_queries: int = 3,
+    rerank: bool = False,
+    reranker_model: str = DEFAULT_RERANKER_MODEL,
+    rerank_candidates: int = 30,
 ) -> list[SearchResult]:
     filters = filters or SearchFilters()
     candidates: list[SearchResult] = []
+    candidate_limit = max(limit, rerank_candidates if rerank else limit)
 
     if include_keyword:
         candidates.extend(
             search_chunks(
                 conn,
                 query,
-                limit=max(limit * 3, limit),
+                limit=max(candidate_limit * 3, candidate_limit),
                 filters=filters,
             )
         )
@@ -37,7 +42,7 @@ def hybrid_search(
             search_metadata(
                 conn,
                 query,
-                limit=max(limit, 5),
+                limit=max(candidate_limit, 5),
                 filters=filters,
             )
         )
@@ -47,7 +52,7 @@ def hybrid_search(
             search_vectors(
                 conn,
                 query,
-                limit=max(limit * 3, limit),
+                limit=max(candidate_limit * 3, candidate_limit),
                 filters=filters,
                 **vector_kwargs,
             )
@@ -57,7 +62,7 @@ def hybrid_search(
             search_agentic(
                 conn,
                 query,
-                limit=max(limit * 2, limit),
+                limit=max(candidate_limit * 2, candidate_limit),
                 filters=filters,
                 include_keyword=include_keyword,
                 include_metadata=include_metadata,
@@ -70,6 +75,13 @@ def hybrid_search(
     merged = _merge_results(candidates)
     _recompute_hybrid_scores(merged)
     merged.sort(key=lambda result: result.score, reverse=True)
+    if rerank:
+        merged = rerank_results(
+            query,
+            merged[:candidate_limit],
+            model=reranker_model,
+            fail_open=True,
+        )
     return merged[:limit]
 
 

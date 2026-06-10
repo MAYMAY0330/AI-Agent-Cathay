@@ -55,18 +55,28 @@ EVIDENCE_JUDGE_RESPONSE_SCHEMA: dict[str, Any] = {
                     "checklist": {
                         "type": "object",
                         "properties": {
-                            "direct_answer": {"type": "integer", "enum": [0, 1]},
                             "key_concepts": {"type": "integer", "enum": [0, 1]},
+                            "actor_match": {"type": "integer", "enum": [0, 1]},
+                            "action_match": {"type": "integer", "enum": [0, 1]},
+                            "condition_scope_match": {"type": "integer", "enum": [0, 1]},
+                            "direct_answer": {"type": "integer", "enum": [0, 1]},
                             "concrete_rule": {"type": "integer", "enum": [0, 1]},
+                            "procedural_detail": {"type": "integer", "enum": [0, 1]},
+                            "quote_supports_answer": {"type": "integer", "enum": [0, 1]},
                             "citation_metadata": {"type": "integer", "enum": [0, 1]},
                             "authoritative_source": {"type": "integer", "enum": [0, 1]},
                             "current_source": {"type": "integer", "enum": [0, 1]},
                             "no_obvious_mismatch": {"type": "integer", "enum": [0, 1]},
                         },
                         "required": [
-                            "direct_answer",
                             "key_concepts",
+                            "actor_match",
+                            "action_match",
+                            "condition_scope_match",
+                            "direct_answer",
                             "concrete_rule",
+                            "procedural_detail",
+                            "quote_supports_answer",
                             "citation_metadata",
                             "authoritative_source",
                             "current_source",
@@ -306,9 +316,14 @@ def _coerce_evidence_judgments(
 
 def _coerce_checklist(raw_checklist: Any) -> dict[str, int]:
     keys = [
-        "direct_answer",
         "key_concepts",
+        "actor_match",
+        "action_match",
+        "condition_scope_match",
+        "direct_answer",
         "concrete_rule",
+        "procedural_detail",
+        "quote_supports_answer",
         "citation_metadata",
         "authoritative_source",
         "current_source",
@@ -323,10 +338,10 @@ def _coerce_classification(raw_classification: Any, score: int) -> str:
     allowed = {"strong", "supporting", "background", "irrelevant", "conflicting"}
     if value in allowed:
         return value
-    if score >= 6:
+    if score >= 10:
         return "strong"
-    if score >= 4:
+    if score >= 7:
         return "supporting"
-    if score >= 2:
+    if score >= 4:
         return "background"
     return "irrelevant"

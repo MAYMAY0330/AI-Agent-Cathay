@@ -9,6 +9,9 @@ from rag.search_models import SearchResult
 class ContextSource:
     label: str
     chunk_id: str
+    source_chunk_id: str | None
+    matched_chunk_id: str | None
+    matched_text_preview: str | None
     title: str
     internal_code: str | None
     document_type: str
@@ -72,6 +75,9 @@ def build_rag_context(
         source = ContextSource(
             label=label,
             chunk_id=result.chunk_id,
+            source_chunk_id=result.source_chunk_id or result.chunk_id,
+            matched_chunk_id=result.matched_chunk_id,
+            matched_text_preview=result.matched_text_preview,
             title=result.title,
             internal_code=result.internal_code,
             document_type=result.document_type,

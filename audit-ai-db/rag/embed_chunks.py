@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -29,60 +30,93 @@ class EmbedChunksSummary:
     failed: int
 
 
+@dataclass(frozen=True)
+class EmbedChunkResult:
+    chunk_id: Any
+    title: str
+    checksum: str
+    embedding: list[float]
+
+
 def embed_missing_chunks(
     conn,
     *,
     model: str,
     limit: int,
     dry_run: bool = False,
+    workers: int = 1,
 ) -> EmbedChunksSummary:
     rows = _fetch_chunks_to_embed(conn, model=model, limit=limit)
     embedded = 0
     failed = 0
+    workers = max(1, workers)
 
-    for row in rows:
-        checksum = _content_checksum(row["chunk_text"])
-        if dry_run:
+    if dry_run:
+        for row in rows:
+            checksum = _content_checksum(row["chunk_text"])
             print(
                 "EMBED_CHUNK_DRY_RUN "
                 f"chunk_id={row['chunk_id']} title={row['title']} checksum={checksum}",
                 flush=True,
             )
-            continue
+        return EmbedChunksSummary(
+            scanned=len(rows),
+            embedded=0,
+            skipped=0,
+            failed=0,
+        )
 
-        try:
-            embedding = embed_text(
-                row["chunk_text"],
-                task_type="retrieval_document",
-                model=model,
-                dimension=DEFAULT_EMBEDDING_DIMENSION,
-            )
-            _upsert_embedding(
-                conn,
-                chunk_id=row["chunk_id"],
-                model=model,
-                embedding=embedding,
-                content_checksum=checksum,
-            )
-            embedded += 1
-            print(
-                "EMBED_CHUNK_OK "
-                f"chunk_id={row['chunk_id']} title={row['title']} dimension={len(embedding)}",
-                flush=True,
-            )
-        except Exception as exc:
-            failed += 1
-            print(
-                f"EMBED_CHUNK_FAILED chunk_id={row['chunk_id']} error={exc}",
-                file=sys.stderr,
-                flush=True,
-            )
+    if not rows:
+        return EmbedChunksSummary(scanned=0, embedded=0, skipped=0, failed=0)
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(_embed_chunk_row, row, model) for row in rows]
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                _upsert_embedding(
+                    conn,
+                    chunk_id=result.chunk_id,
+                    model=model,
+                    embedding=result.embedding,
+                    content_checksum=result.checksum,
+                )
+                embedded += 1
+                print(
+                    "EMBED_CHUNK_OK "
+                    f"chunk_id={result.chunk_id} title={result.title} "
+                    f"dimension={len(result.embedding)}",
+                    flush=True,
+                )
+            except Exception as exc:
+                failed += 1
+                print(
+                    f"EMBED_CHUNK_FAILED error={exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
     return EmbedChunksSummary(
         scanned=len(rows),
         embedded=embedded,
-        skipped=0 if dry_run else max(0, len(rows) - embedded - failed),
+        skipped=max(0, len(rows) - embedded - failed),
         failed=failed,
+    )
+
+
+def _embed_chunk_row(row: dict[str, Any], model: str) -> EmbedChunkResult:
+    checksum = _content_checksum(row["chunk_text"])
+    embedding = embed_text(
+        row["chunk_text"],
+        task_type="retrieval_document",
+        model=model,
+        dimension=DEFAULT_EMBEDDING_DIMENSION,
+    )
+    return EmbedChunkResult(
+        chunk_id=row["chunk_id"],
+        title=row["title"],
+        checksum=checksum,
+        embedding=embedding,
     )
 
 
@@ -102,6 +136,14 @@ def _fetch_chunks_to_embed(conn, *, model: str, limit: int) -> list[dict[str, An
                AND e.embedding_model = %(model)s
                AND e.content_checksum = encode(sha256(convert_to(c.chunk_text, 'UTF8')), 'hex')
             WHERE e.id IS NULL
+              AND (
+                  c.parent_chunk_id IS NOT NULL
+                  OR NOT EXISTS (
+                      SELECT 1
+                      FROM document_chunks child
+                      WHERE child.parent_chunk_id = c.id
+                  )
+              )
             ORDER BY d.updated_at DESC, c.created_at ASC, c.chunk_index ASC
             LIMIT %(limit)s
             """,
@@ -157,6 +199,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument("--model", default=DEFAULT_EMBEDDING_MODEL)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of concurrent embedding API calls. Keep modest to avoid rate limits.",
+    )
     return parser
 
 
@@ -172,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
             model=args.model,
             limit=args.limit,
             dry_run=args.dry_run,
+            workers=args.workers,
         )
     except IngestionError as exc:
         print(f"FAILED stage={exc.stage} error={exc.message}", file=sys.stderr)

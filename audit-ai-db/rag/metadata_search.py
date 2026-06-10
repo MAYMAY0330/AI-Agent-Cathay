@@ -59,6 +59,7 @@ def search_metadata(
                   AND (%(status)s::text IS NULL OR d.status = %(status)s::text)
                   AND (%(source_system)s::text IS NULL OR d.source_system = %(source_system)s::text)
                   AND (%(language)s::text IS NULL OR d.language = %(language)s::text)
+                  AND (%(is_latest)s::boolean IS NULL OR d.is_latest = %(is_latest)s::boolean)
             ),
             ranked_documents AS (
                 SELECT *,
@@ -74,7 +75,9 @@ def search_metadata(
             ),
             chunk_candidates AS (
                 SELECT
-                    c.id AS chunk_id,
+                    COALESCE(p.id, c.id) AS chunk_id,
+                    p.id AS parent_chunk_id,
+                    c.id AS matched_chunk_id,
                     c.document_id,
                     c.version_id,
                     c.chunk_level,
@@ -82,13 +85,14 @@ def search_metadata(
                     d.title,
                     d.document_type,
                     d.source_system,
-                    c.section_title,
-                    c.heading_path,
-                    c.clause_number,
-                    c.page_start,
-                    c.page_end,
-                    c.chunk_index,
-                    c.chunk_text,
+                    COALESCE(p.section_title, c.section_title) AS section_title,
+                    COALESCE(p.heading_path, c.heading_path) AS heading_path,
+                    COALESCE(p.clause_number, c.clause_number) AS clause_number,
+                    COALESCE(p.page_start, c.page_start) AS page_start,
+                    COALESCE(p.page_end, c.page_end) AS page_end,
+                    COALESCE(p.chunk_index, c.chunk_index) AS chunk_index,
+                    COALESCE(p.chunk_text, c.chunk_text) AS chunk_text,
+                    c.chunk_text AS matched_chunk_text,
                     d.metadata_score,
                     d.metadata_trigram_score,
                     d.metadata_term_score,
@@ -112,7 +116,16 @@ def search_metadata(
                 FROM ranked_documents d
                 JOIN document_versions v ON v.document_id = d.id AND v.is_current = TRUE
                 JOIN document_chunks c ON c.version_id = v.id
+                LEFT JOIN document_chunks p ON p.id = c.parent_chunk_id
                 CROSS JOIN q
+                WHERE (
+                    c.parent_chunk_id IS NOT NULL
+                    OR NOT EXISTS (
+                        SELECT 1
+                        FROM document_chunks child
+                        WHERE child.parent_chunk_id = c.id
+                    )
+                )
             ),
             ranked_chunks AS (
                 SELECT
@@ -162,6 +175,7 @@ def search_metadata(
                 "status": filters.status,
                 "source_system": filters.source_system,
                 "language": filters.language,
+                "is_latest": filters.is_latest,
             },
         )
         rows = cur.fetchall()

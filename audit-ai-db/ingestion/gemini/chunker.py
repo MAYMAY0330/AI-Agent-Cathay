@@ -11,7 +11,7 @@ from ingestion.models import ChunkRecord, DocumentMetadata, IngestionError, Summ
 
 
 GEMINI_CHUNK_SYSTEM = (
-    "You are an internal audit/legal document structuring engine. "
+    "You are an internal audit/legal document parent-section boundary engine. "
     "Return only valid JSON. Preserve source wording. Do not invent content."
 )
 
@@ -32,7 +32,7 @@ def chunk_markdown_with_gemini(
     call_result = call_gemini_text(
         prompt=prompt,
         system=GEMINI_CHUNK_SYSTEM,
-        max_tokens=20000,
+        max_tokens=8192,
         call_name="gemini_chunking",
     )
     raw = call_result.text
@@ -49,7 +49,7 @@ def chunk_markdown_with_gemini(
         repair_result = call_gemini_text(
             prompt=_build_json_repair_prompt(raw),
             system=GEMINI_JSON_REPAIR_SYSTEM,
-            max_tokens=20000,
+            max_tokens=8192,
             call_name="gemini_chunking_json_repair",
         )
         usage = GeminiTokenUsage.combine(
@@ -74,9 +74,9 @@ def chunk_markdown_with_gemini(
                 ),
             ) from first_error
 
-    chunks = _chunk_records_from_json(parsed)
+    chunks = _chunk_records_from_json(parsed, markdown=markdown)
     if not chunks:
-        raise IngestionError("gemini_chunking", "Gemini returned no chunks")
+        raise IngestionError("gemini_chunking", "Gemini returned no parent chunks")
 
     summary = SummaryResult(
         short_summary=_optional_string(parsed.get("short_summary")),
@@ -116,8 +116,8 @@ Rules:
 - Preserve every original field and every source text value.
 - Do not summarize, translate, or invent content.
 - The repaired JSON must have the same top-level schema:
-  document_type, short_summary, keywords, main_topics, chunks.
-- chunks must be an array.
+	  document_type, short_summary, keywords, main_topics, parent_chunks.
+- parent_chunks must be an array.
 
 Malformed JSON:
 {raw}
@@ -126,7 +126,7 @@ Malformed JSON:
 
 def _build_chunk_prompt(markdown: str, metadata: DocumentMetadata) -> str:
     return f"""
-Convert the Markdown document into audit knowledge-base chunks.
+Convert the Markdown document into audit knowledge-base parent chunks.
 
 Document metadata:
 - title: {metadata.title}
@@ -139,33 +139,44 @@ Output exactly one JSON object with this schema:
   "short_summary": "2-4 sentence summary based only on source text",
   "keywords": ["..."],
   "main_topics": ["..."],
-  "chunks": [
+  "parent_chunks": [
     {{
       "chunk_index": 1,
-      "chunk_level": "header | article | section | paragraph",
+      "chunk_level": "parent",
       "source_structure_type": "document_header | regulation_article | regulation_section | legal_opinion_section | manual_step | unknown",
       "heading_path": "full heading path or section title",
       "section_title": "section title, or 文件標題 for document header",
       "clause_number": "article/clause number such as 第一條 or null",
       "page_start": 1,
       "page_end": 1,
-      "chunk_text": "faithful source text for this chunk"
+      "start_line": 12,
+      "end_line": 35,
+      "parent_reason": "short reason why this boundary is a complete logical parent section"
     }}
   ]
 }}
 
-Chunking rules:
+Parent chunking rules:
+- Return parent chunks only. Do not create small retrieval chunks.
+- A parent chunk should be one complete legal article, policy section, manual step, legal reasoning section, table/form section, or document header block.
+- Keep a table together with the heading/rule it belongs to.
+- Do not split a legal article in the middle, even if it has numbered subitems.
+- Do not merge unrelated articles or sections.
 - Preserve legal and regulatory markers: 第一條, 第二條, 一、, 二、, 法務室意見, 結論.
-- For internal_rule: one article or coherent section per chunk.
-- For legal_opinion: one legal reasoning section per chunk. Use 法務室意見 when appropriate.
-- For system_manual: one operation/process section per chunk.
-- The first document title/date/responsible unit block should be chunk_level=header, source_structure_type=document_header, section_title=文件標題.
-- Do not summarize inside chunk_text. chunk_text must be source content, not commentary.
+- For internal_rule: one article or coherent policy section per parent chunk.
+- For legal_opinion: one legal reasoning section per parent chunk. Use 法務室意見 when appropriate.
+- For system_manual: one operation/process section per parent chunk.
+- The first document title/date/responsible unit block should be chunk_level=parent, source_structure_type=document_header, section_title=文件標題.
+- Do not return chunk_text unless line numbers are impossible.
+- Use start_line and end_line from the numbered Markdown preview below.
+- The preview may truncate long lines; choose boundaries by line number anyway.
+- The application will extract full source text locally from the original Markdown.
+- Put reasoning only in parent_reason.
 - If page markers are present in HTML comments like <!-- page:3 route:... -->, use them for page_start/page_end.
 - Return JSON only, no markdown fences.
 
-Markdown document:
-{markdown}
+Numbered Markdown document:
+{_number_markdown_lines(markdown)}
 """.strip()
 
 
@@ -185,27 +196,37 @@ def _parse_json_object(raw: str) -> dict[str, Any]:
     return parsed
 
 
-def _chunk_records_from_json(parsed: dict[str, Any]) -> list[ChunkRecord]:
-    raw_chunks = parsed.get("chunks")
+def _chunk_records_from_json(
+    parsed: dict[str, Any],
+    *,
+    markdown: str | None = None,
+) -> list[ChunkRecord]:
+    raw_chunks = parsed.get("parent_chunks")
+    if raw_chunks is None:
+        raw_chunks = parsed.get("chunks")
     if not isinstance(raw_chunks, list):
-        raise IngestionError("gemini_chunking", "Gemini JSON missing chunks array")
+        raise IngestionError("gemini_chunking", "Gemini JSON missing parent_chunks array")
+    if markdown is not None:
+        _infer_missing_line_ranges(raw_chunks, markdown)
 
     chunks: list[ChunkRecord] = []
     for index, item in enumerate(raw_chunks, start=1):
         if not isinstance(item, dict):
             continue
-        text = _required_string(item.get("chunk_text"), "chunk_text")
-        chunk_level = _optional_string(item.get("chunk_level")) or "section"
+        text = _chunk_text_from_json_item(item, markdown)
+        raw_chunk_level = _optional_string(item.get("chunk_level"))
         source_structure_type = (
-            _optional_string(item.get("source_structure_type")) or "unknown"
+            _optional_string(item.get("source_structure_type"))
+            or raw_chunk_level
+            or "llm_parent_section"
         )
         section_title = _optional_string(item.get("section_title"))
-        if chunk_level == "header" and not section_title:
+        if source_structure_type == "document_header" and not section_title:
             section_title = "文件標題"
         chunks.append(
             ChunkRecord(
                 chunk_index=int(item.get("chunk_index") or index),
-                chunk_level=chunk_level,
+                chunk_level="parent",
                 source_structure_type=source_structure_type,
                 heading_path=_optional_string(item.get("heading_path")) or section_title,
                 section_title=section_title,
@@ -222,7 +243,7 @@ def _chunk_records_from_json(parsed: dict[str, Any]) -> list[ChunkRecord]:
     return [
         ChunkRecord(
             chunk_index=index,
-            chunk_level=chunk.chunk_level,
+            chunk_level="parent",
             source_structure_type=chunk.source_structure_type,
             heading_path=chunk.heading_path,
             section_title=chunk.section_title,
@@ -236,6 +257,73 @@ def _chunk_records_from_json(parsed: dict[str, Any]) -> list[ChunkRecord]:
         )
         for index, chunk in enumerate(chunks, start=1)
     ]
+
+
+def _number_markdown_lines(markdown: str, max_line_chars: int = 220) -> str:
+    lines = markdown.splitlines()
+    width = max(4, len(str(len(lines))))
+    numbered_lines: list[str] = []
+    for line_number, line in enumerate(lines, start=1):
+        preview = re.sub(r"\s+", " ", line).strip()
+        if len(preview) > max_line_chars:
+            preview = preview[:max_line_chars].rstrip() + "..."
+        numbered_lines.append(f"{line_number:0{width}d}: {preview}")
+    return "\n".join(numbered_lines)
+
+
+def _infer_missing_line_ranges(raw_chunks: list[Any], markdown: str) -> None:
+    line_count = len(markdown.splitlines())
+    chunk_items = [item for item in raw_chunks if isinstance(item, dict)]
+    for index, item in enumerate(chunk_items):
+        if _optional_int(item.get("start_line")) is not None and _optional_int(item.get("end_line")) is not None:
+            continue
+
+        previous_end = None
+        for previous in reversed(chunk_items[:index]):
+            previous_end = _optional_int(previous.get("end_line"))
+            if previous_end is not None:
+                break
+
+        next_start = None
+        for following in chunk_items[index + 1 :]:
+            next_start = _optional_int(following.get("start_line"))
+            if next_start is not None:
+                break
+
+        inferred_start = (previous_end + 1) if previous_end is not None else 1
+        inferred_end = (next_start - 1) if next_start is not None else line_count
+        if inferred_start <= inferred_end:
+            item.setdefault("start_line", inferred_start)
+            item.setdefault("end_line", inferred_end)
+
+
+def _chunk_text_from_json_item(item: dict[str, Any], markdown: str | None) -> str:
+    text = _optional_string(item.get("chunk_text"))
+    if text:
+        return text
+    if markdown is None:
+        raise IngestionError(
+            "gemini_chunking",
+            "Gemini parent chunk missing chunk_text and no source Markdown was provided",
+        )
+    start_line = _optional_int(item.get("start_line"))
+    end_line = _optional_int(item.get("end_line"))
+    if start_line is None or end_line is None:
+        raise IngestionError(
+            "gemini_chunking",
+            "Gemini parent chunk must include start_line and end_line",
+        )
+    lines = markdown.splitlines()
+    if start_line < 1:
+        start_line = 1
+    if end_line > len(lines):
+        end_line = len(lines)
+    if end_line < start_line:
+        raise IngestionError(
+            "gemini_chunking",
+            f"Gemini parent chunk has invalid line range: {start_line}-{end_line}",
+        )
+    return "\n".join(lines[start_line - 1 : end_line]).strip()
 
 
 def _required_string(value: Any, field_name: str) -> str:

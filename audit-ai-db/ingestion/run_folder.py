@@ -15,8 +15,8 @@ from ingestion.models import IngestionError
 from ingestion.hybrid.pipeline import run_hybrid_ingestion
 
 
-SUPPORTED_EXTENSIONS = {".docx", ".pdf"}
-UNSUPPORTED_EXTENSIONS = {".xlsx", ".xls", ".csv", ".pptx", ".txt", ".html"}
+SUPPORTED_EXTENSIONS = {".docx", ".pdf", ".xlsx", ".xls", ".csv"}
+UNSUPPORTED_EXTENSIONS = {".pptx", ".txt", ".html"}
 
 
 @dataclass(frozen=True)
@@ -97,11 +97,13 @@ def run_folder_ingestion(
     language: str,
     internal_code_prefix: str,
     strategy: str = "auto",
+    parent_chunker: str = "rules",
     output_dir: str = "data/processed/hybrid_pipeline",
     vision_mode: str = "minimal",
     max_vision_pages: int | None = None,
     no_db: bool = False,
     dry_run: bool = False,
+    force_reprocess: bool = False,
 ) -> list[BatchResult]:
     folder = Path(folder_path).expanduser().resolve()
     if not folder.exists():
@@ -152,10 +154,12 @@ def run_folder_ingestion(
             result = run_hybrid_ingestion(
                 metadata,
                 strategy=strategy,
+                parent_chunker=parent_chunker,
                 output_dir=output_dir,
                 vision_mode=vision_mode,
                 max_vision_pages=max_vision_pages,
                 no_db=no_db,
+                force_reprocess=force_reprocess,
             )
             results.append(
                 BatchResult(
@@ -266,6 +270,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Hybrid strategy for supported files. Default: auto",
     )
     parser.add_argument(
+        "--parent-chunker",
+        choices=["rules", "gemini"],
+        default="rules",
+        help=(
+            "Parent chunk boundary method after Markdown parsing. "
+            "rules is deterministic; gemini asks Gemini to choose semantic parent sections."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         default="data/processed/hybrid_pipeline",
         help="Where hybrid/Gemini artifacts are written.",
@@ -292,6 +305,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="List files and inferred metadata without writing to the database.",
     )
     parser.add_argument(
+        "--force-reprocess",
+        action="store_true",
+        help="Reprocess files even when the stored current version has the same checksum.",
+    )
+    parser.add_argument(
         "--report-path",
         default="data/processed/ingestion_report.csv",
         help="CSV report output path. Default: data/processed/ingestion_report.csv",
@@ -315,11 +333,13 @@ def main(argv: list[str] | None = None) -> int:
             language=args.language,
             internal_code_prefix=args.internal_code_prefix,
             strategy=args.strategy,
+            parent_chunker=args.parent_chunker,
             output_dir=args.output_dir,
             vision_mode=args.vision_mode,
             max_vision_pages=args.max_vision_pages_per_file,
             no_db=args.no_db,
             dry_run=args.dry_run,
+            force_reprocess=args.force_reprocess,
         )
     except IngestionError as exc:
         print(f"FAILED stage={exc.stage} error={exc.message}", file=sys.stderr)

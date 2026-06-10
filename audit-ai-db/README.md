@@ -156,6 +156,12 @@ The retrieval layer combines chunk keyword/full-text search with document metada
 python -m rag.run_search "資料共享是否需要告知客戶？" --vector --agentic
 ```
 
+Rerank hybrid candidates with the local BGE reranker:
+
+```bash
+python -m rag.run_search "資料共享是否需要告知客戶？" --vector --rerank
+```
+
 See `rag/README.md` for filters and output options.
 
 Preview a grounded RAG answer context without calling an LLM:
@@ -201,6 +207,12 @@ with Gemini planner/evidence judgment:
 
 ```bash
 python -m agent.run "資料共享是否需要告知客戶？" --vector
+```
+
+Add local reranking to the agent retrieval stage:
+
+```bash
+python -m agent.run "資料共享是否需要告知客戶？" --vector --rerank
 ```
 
 Enable agentic query expansion inside retrieval:

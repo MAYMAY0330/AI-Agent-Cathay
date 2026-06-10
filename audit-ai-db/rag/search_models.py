@@ -10,6 +10,7 @@ class SearchFilters:
     status: str | None = "active"
     source_system: str | None = None
     language: str | None = None
+    is_latest: bool | None = True
 
 
 @dataclass
@@ -30,7 +31,18 @@ class SearchResult:
     chunk_text: str
     score: float
     match_sources: list[str] = field(default_factory=list)
-    score_details: dict[str, float] = field(default_factory=dict)
+    score_details: dict[str, Any] = field(default_factory=dict)
+    parent_chunk_id: str | None = None
+    matched_chunk_id: str | None = None
+    matched_chunk_text: str | None = None
+    source_chunk_id: str | None = None
+    matched_text_preview: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.source_chunk_id is None:
+            self.source_chunk_id = self.chunk_id
+        if self.matched_text_preview is None and self.matched_chunk_text:
+            self.matched_text_preview = _preview(self.matched_chunk_text)
 
     @classmethod
     def from_row(
@@ -58,6 +70,15 @@ class SearchResult:
             score=float(row.get("score") or 0),
             match_sources=match_sources,
             score_details=score_details or {},
+            parent_chunk_id=(
+                str(row["parent_chunk_id"]) if row.get("parent_chunk_id") else None
+            ),
+            matched_chunk_id=(
+                str(row["matched_chunk_id"]) if row.get("matched_chunk_id") else None
+            ),
+            matched_chunk_text=row.get("matched_chunk_text"),
+            source_chunk_id=str(row["chunk_id"]),
+            matched_text_preview=_preview(row.get("matched_chunk_text")),
         )
 
     def merge(self, other: "SearchResult") -> None:
@@ -66,4 +87,18 @@ class SearchResult:
             if source not in self.match_sources:
                 self.match_sources.append(source)
         self.score_details.update(other.score_details)
+        if self.matched_chunk_id is None:
+            self.matched_chunk_id = other.matched_chunk_id
+        if self.matched_chunk_text is None:
+            self.matched_chunk_text = other.matched_chunk_text
+        if self.matched_text_preview is None:
+            self.matched_text_preview = other.matched_text_preview
 
+
+def _preview(text: str | None, *, limit: int = 180) -> str | None:
+    if not text:
+        return None
+    clean = " ".join(str(text).split())
+    if len(clean) <= limit:
+        return clean
+    return clean[: max(0, limit - 3)] + "..."

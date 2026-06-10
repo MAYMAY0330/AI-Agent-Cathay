@@ -14,6 +14,7 @@ from ingestion.db_writer import connect
 from ingestion.models import IngestionError
 from rag.embedding_client import DEFAULT_EMBEDDING_MODEL
 from rag.hybrid_search import hybrid_search
+from rag.reranker import DEFAULT_RERANKER_MODEL
 from rag.search_models import SearchFilters, SearchResult
 
 
@@ -31,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--all-statuses",
         action="store_true",
         help="Search documents regardless of status.",
+    )
+    parser.add_argument(
+        "--all-versions",
+        action="store_true",
+        help="Search older/non-latest document family versions too.",
     )
     parser.add_argument(
         "--keyword-only",
@@ -64,6 +70,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Use vector similarity search only.",
     )
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Rerank the hybrid candidate pool with a local BGE reranker.",
+    )
+    parser.add_argument("--reranker-model", default=DEFAULT_RERANKER_MODEL)
+    parser.add_argument("--rerank-candidates", type=int, default=30)
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     parser.add_argument("--preview-chars", type=int, default=360)
     return parser
@@ -85,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         status=None if args.all_statuses else args.status,
         source_system=args.source_system,
         language=args.language,
+        is_latest=None if args.all_versions else True,
     )
 
     conn = None
@@ -101,6 +115,9 @@ def main(argv: list[str] | None = None) -> int:
             include_agentic=args.agentic,
             embedding_model=args.embedding_model,
             max_agentic_queries=args.max_agentic_queries,
+            rerank=args.rerank,
+            reranker_model=args.reranker_model,
+            rerank_candidates=args.rerank_candidates,
         )
     except IngestionError as exc:
         print(f"FAILED stage={exc.stage} error={exc.message}", file=sys.stderr)

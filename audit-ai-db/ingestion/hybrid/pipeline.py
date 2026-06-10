@@ -8,7 +8,7 @@ from ingestion.checksum import generate_file_checksum
 from ingestion.config import DBConfig
 from ingestion.file_loader import load_file
 from ingestion.legacy.local_ingestion import _try_log_failure
-from ingestion.metadata_extractor import prepare_metadata
+from ingestion.metadata_extractor import enrich_metadata_from_markdown, prepare_metadata
 from ingestion.models import DocumentMetadata, FileInfo, IngestionError
 
 from ingestion.hybrid.chunkers import (
@@ -23,13 +23,21 @@ def run_hybrid_ingestion(
     raw_metadata: dict[str, Any],
     *,
     strategy: str = "auto",
+    parent_chunker: str = "rules",
     output_dir: str = "data/processed/hybrid_pipeline",
     max_pages: int | None = None,
     vision_mode: str = "minimal",
     max_vision_pages: int | None = None,
     no_db: bool = False,
+    force_reprocess: bool = False,
 ) -> dict[str, Any]:
     requested_strategy = strategy.strip().lower()
+    parent_chunker = parent_chunker.strip().lower()
+    if parent_chunker not in {"rules", "gemini"}:
+        raise IngestionError(
+            "hybrid_configuration",
+            "parent_chunker must be one of: rules, gemini",
+        )
     if max_pages is not None and not no_db:
         raise IngestionError(
             "hybrid_configuration",
@@ -71,6 +79,7 @@ def run_hybrid_ingestion(
                 conn,
                 metadata.internal_code,
                 file_checksum,
+                force_reprocess=force_reprocess,
             )
 
             if version_decision.is_duplicate:
@@ -109,7 +118,10 @@ def run_hybrid_ingestion(
             max_pages=max_pages,
             vision_mode=vision_mode,
             max_vision_pages=max_vision_pages,
+            parent_chunker=parent_chunker,
         )
+        if prepared.markdown:
+            metadata = enrich_metadata_from_markdown(metadata, prepared.markdown)
 
         if no_db:
             return _build_result(
@@ -168,7 +180,10 @@ def run_hybrid_ingestion(
                     max_pages=max_pages,
                     vision_mode=vision_mode,
                     max_vision_pages=max_vision_pages,
+                    parent_chunker=parent_chunker,
                 )
+                if prepared.markdown:
+                    metadata = enrich_metadata_from_markdown(metadata, prepared.markdown)
                 if no_db:
                     return _build_result(
                         status="parsed_no_db",
@@ -290,6 +305,11 @@ def _store_prepared_chunks(
             prepared.chunks,
         )
         db_writer.update_document_summary(conn, document_id, prepared.summary)
+        db_writer.expire_older_documents_in_family(
+            conn,
+            current_document_id=document_id,
+            metadata=metadata,
+        )
 
         final_stage = _stored_stage(prepared)
         logger.write_ingestion_log(
@@ -317,9 +337,15 @@ def _prepare_chunks(
     max_pages: int | None,
     vision_mode: str,
     max_vision_pages: int | None,
+    parent_chunker: str,
 ) -> PreparedChunks:
     if strategy_decision.selected_strategy == "local":
-        return prepare_local_chunks(file_info, metadata)
+        return prepare_local_chunks(
+            file_info,
+            metadata,
+            output_root,
+            parent_chunker=parent_chunker,
+        )
     return prepare_gemini_chunks(
         file_info,
         metadata,

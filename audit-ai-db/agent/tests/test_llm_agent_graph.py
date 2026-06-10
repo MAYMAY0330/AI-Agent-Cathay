@@ -44,7 +44,7 @@ class LlmAgentGraphTests(unittest.TestCase):
         self.assertEqual(result.iterations, 1)
         self.assertEqual(result.search_tasks[0].task_id, "llm_search_1_1")
         self.assertEqual([decision["kind"] for decision in result.llm_decisions], ["planner", "evidence_judge"])
-        self.assertEqual(result.evidence_judgments[0].score, 7)
+        self.assertEqual(result.evidence_judgments[0].score, 12)
 
 
 def _fake_registry() -> ToolRegistry:
@@ -123,16 +123,21 @@ def _fake_registry() -> ToolRegistry:
                     label="S1",
                     chunk_id="chunk-1",
                     checklist={
-                        "direct_answer": 1,
                         "key_concepts": 1,
+                        "actor_match": 1,
+                        "action_match": 1,
+                        "condition_scope_match": 1,
+                        "direct_answer": 1,
                         "concrete_rule": 1,
+                        "procedural_detail": 1,
+                        "quote_supports_answer": 1,
                         "citation_metadata": 1,
                         "authoritative_source": 1,
                         "current_source": 1,
                         "no_obvious_mismatch": 1,
                     },
-                    score=7,
-                    max_score=7,
+                    score=12,
+                    max_score=12,
                     classification="strong",
                     reason="test checklist",
                     supporting_quote="資料共享依法應取得客戶同意",
@@ -195,7 +200,7 @@ def _result() -> SearchResult:
         page_start=1,
         page_end=1,
         chunk_index=1,
-        chunk_text="資料共享依法應取得客戶同意者，應於事前取得其同意後始得為之。",
+        chunk_text="資料共享依法應取得客戶同意者，應於事前告知客戶並取得其同意後始得為之。",
         score=0.2,
         match_sources=["keyword"],
         score_details={"keyword_score": 0.2},

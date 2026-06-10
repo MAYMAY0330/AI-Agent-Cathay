@@ -10,7 +10,7 @@ from ingestion import chunker, structure_detector
 from ingestion.models import ChunkRecord, DocumentMetadata, FileInfo, SummaryResult
 from ingestion.summary_generator import generate_summary
 
-from ingestion.hybrid.readers import read_gemini_document, read_local_blocks
+from ingestion.hybrid.readers import read_gemini_document, read_local_document
 
 
 @dataclass(frozen=True)
@@ -22,15 +22,57 @@ class PreparedChunks:
     summary: SummaryResult
     error_message: str | None = None
     artifact_paths: dict[str, str] = field(default_factory=dict)
-    metrics: dict[str, int] = field(default_factory=dict)
+    metrics: dict[str, int | str] = field(default_factory=dict)
+    markdown: str | None = None
 
 
 def prepare_local_chunks(
     file_info: FileInfo,
     metadata: DocumentMetadata,
+    output_root: Path,
+    *,
+    parent_chunker: str = "rules",
 ) -> PreparedChunks:
-    blocks = read_local_blocks(file_info)
+    output_name = output_name_for_metadata(metadata)
+    read_result = read_local_document(
+        file_info,
+        metadata,
+        output_root,
+        output_name=output_name,
+    )
+    blocks = read_result.blocks
     structure = structure_detector.detect_structure(blocks, metadata.document_type)
+    artifact_paths = {"markdown_path": str(read_result.output_markdown_path)}
+    metrics: dict[str, int | str] = {
+        "local_blocks": len(blocks),
+        "parse_engine": read_result.parse_engine,
+        "table_repair_status": read_result.table_repair_status,
+        "parent_chunker": parent_chunker,
+    }
+
+    if parent_chunker == "gemini":
+        raw_chunks, summary, chunks_path, chunk_usage = chunk_markdown_with_gemini(
+            read_result.markdown,
+            metadata,
+            output_root,
+            output_name=output_name,
+        )
+        chunks = chunker.add_child_chunks(raw_chunks)
+        usage_path = write_token_usage(output_root, output_name, [chunk_usage])
+        artifact_paths["chunks_path"] = str(chunks_path)
+        artifact_paths["usage_path"] = str(usage_path)
+        metrics.update(summarize_token_usage([chunk_usage]))
+        return PreparedChunks(
+            selected_strategy="local",
+            stage="llm_parent_chunking",
+            status="success",
+            chunks=chunks,
+            summary=summary,
+            artifact_paths=artifact_paths,
+            metrics=metrics,
+            markdown=read_result.markdown,
+        )
+
     chunks = chunker.create_chunks(structure.sections)
 
     status = "success"
@@ -61,7 +103,9 @@ def prepare_local_chunks(
         chunks=chunks,
         summary=summary,
         error_message=error_message,
-        metrics={"local_blocks": len(blocks)},
+        artifact_paths=artifact_paths,
+        metrics=metrics,
+        markdown=read_result.markdown,
     )
 
 
@@ -89,12 +133,13 @@ def prepare_gemini_chunks(
         read_result.page_analysis,
     )
 
-    chunks, summary, chunks_path, chunk_usage = chunk_markdown_with_gemini(
+    raw_chunks, summary, chunks_path, chunk_usage = chunk_markdown_with_gemini(
         read_result.markdown,
         metadata,
         output_root,
         output_name=output_name,
     )
+    chunks = chunker.add_child_chunks(raw_chunks)
     token_usage = list(read_result.usage or []) + [chunk_usage]
     usage_path = write_token_usage(output_root, output_name, token_usage)
     usage_summary = summarize_token_usage(token_usage)
@@ -116,6 +161,7 @@ def prepare_gemini_chunks(
         summary=summary,
         artifact_paths=artifact_paths,
         metrics=usage_summary,
+        markdown=read_result.markdown,
     )
 
 

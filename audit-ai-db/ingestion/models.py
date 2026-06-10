@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,14 @@ class DocumentMetadata:
     status: str
     system_category: str | None = None
     responsible_unit: str | None = None
+    issuing_unit: str | None = None
+    effective_date: date | None = None
+    effective_year: int | None = None
+    revision_date: date | None = None
+    document_family: str | None = None
+    normalized_version_label: str | None = None
+    is_latest: bool = True
+    supersedes_document_id: Any | None = None
     short_summary: str | None = None
     keywords: list[str] = field(default_factory=list)
     main_topics: list[str] = field(default_factory=list)
@@ -55,6 +64,14 @@ class DocumentMetadata:
             "main_topics": self.main_topics or None,
             "system_category": self.system_category,
             "responsible_unit": self.responsible_unit,
+            "issuing_unit": self.issuing_unit,
+            "effective_date": self.effective_date,
+            "effective_year": self.effective_year,
+            "revision_date": self.revision_date,
+            "document_family": self.document_family,
+            "normalized_version_label": self.normalized_version_label,
+            "is_latest": self.is_latest,
+            "supersedes_document_id": self.supersedes_document_id,
             "source_system": self.source_system,
             "source_record_id": self.source_record_id,
             "source_url": self.source_url,
@@ -128,4 +145,3 @@ class VersionDecision:
     @property
     def is_duplicate(self) -> bool:
         return self.action == "duplicate"
-

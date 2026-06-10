@@ -14,6 +14,7 @@ from agent.state import AgentState
 from agent.workflow import run_agent
 from ingestion.models import IngestionError
 from rag.embedding_client import DEFAULT_EMBEDDING_MODEL
+from rag.reranker import DEFAULT_RERANKER_MODEL
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable the small RAG search agent for extra validated search queries.",
     )
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument("--rerank", action="store_true")
+    parser.add_argument("--reranker-model", default=DEFAULT_RERANKER_MODEL)
+    parser.add_argument("--rerank-candidates", type=int, default=30)
     parser.add_argument("--max-context-chars", type=int, default=12000)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
@@ -78,6 +82,9 @@ def main(argv: list[str] | None = None) -> int:
                 llm_decisions=not args.no_llm_decisions,
                 log_dir=args.log_dir,
                 max_context_chars=args.max_context_chars,
+                rerank=args.rerank,
+                reranker_model=args.reranker_model,
+                rerank_candidates=args.rerank_candidates,
             )
             result = _evaluate_case(index, case, state)
         except IngestionError as exc:

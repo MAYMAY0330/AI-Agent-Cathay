@@ -59,6 +59,17 @@ python -m rag.run_search "客戶資料共享是否需要客戶同意？" --vecto
 python -m rag.run_search "客戶資料共享是否需要客戶同意？" --vector --limit 5
 ```
 
+Add local BGE reranking after hybrid retrieval:
+
+```bash
+python -m rag.run_search "客戶資料共享是否需要客戶同意？" --vector --rerank --limit 5
+```
+
+Reranking is opt-in. It uses `BAAI/bge-reranker-v2-m3` by default through
+FlagEmbedding, scores `(question, matched child text)` pairs when child hits are
+available, and keeps the existing hybrid ranking if the local reranker cannot be
+loaded.
+
 Add the small search agent when exact terms may miss formal document wording:
 
 ```bash
@@ -94,7 +105,17 @@ Use vector retrieval in the answer flow after embeddings exist:
 
 ```bash
 python -m rag.run_answer "客戶資料共享是否需要客戶同意？" --vector --limit 6
+python -m rag.run_answer "客戶資料共享是否需要客戶同意？" --vector --rerank --limit 6
 ```
 
 The answer prompt requires Traditional Chinese output, inline source labels such
-as `[S1]`, and no unsupported claims outside the retrieved sources.
+as `[S1]`, and no unsupported claims outside the retrieved sources. Final answer
+generation requests structured JSON internally and exposes citations separately
+in CLI `--json` output.
+
+Run a small retrieval quality regression set:
+
+```bash
+python -m rag.run_retrieval_eval --vector --json
+python -m rag.run_retrieval_eval --vector --rerank --json
+```

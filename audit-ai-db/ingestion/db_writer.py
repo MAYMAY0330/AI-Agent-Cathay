@@ -109,6 +109,24 @@ def mark_versions_not_current(conn, document_id: Any) -> None:
         )
 
 
+def delete_document_chunks(conn, document_id: Any) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM chunk_embeddings e
+            USING document_chunks c
+            WHERE e.chunk_id = c.id
+              AND c.document_id = %s
+            """,
+            (document_id,),
+        )
+        cur.execute(
+            "DELETE FROM document_chunks WHERE document_id = %s",
+            (document_id,),
+        )
+        return cur.rowcount or 0
+
+
 def insert_document_version(
     conn,
     document_id: Any,
@@ -151,11 +169,76 @@ def insert_document_chunks(
     version_id: Any,
     chunks: Iterable[ChunkRecord],
 ) -> int:
-    rows = [
+    chunk_list = list(chunks)
+    if not chunk_list:
+        return 0
+
+    inserted_ids_by_index: dict[int, Any] = {}
+    with conn.cursor() as cur:
+        for chunk in chunk_list:
+            if chunk.parent_chunk_id is not None:
+                continue
+            inserted_ids_by_index[chunk.chunk_index] = _insert_document_chunk(
+                cur,
+                document_id=document_id,
+                version_id=version_id,
+                chunk=chunk,
+                parent_chunk_id=None,
+            )
+
+        for chunk in chunk_list:
+            if chunk.parent_chunk_id is None:
+                continue
+            parent_chunk_id = _resolve_parent_chunk_id(
+                chunk.parent_chunk_id,
+                inserted_ids_by_index,
+            )
+            inserted_ids_by_index[chunk.chunk_index] = _insert_document_chunk(
+                cur,
+                document_id=document_id,
+                version_id=version_id,
+                chunk=chunk,
+                parent_chunk_id=parent_chunk_id,
+            )
+
+    return len(chunk_list)
+
+
+def _insert_document_chunk(
+    cur,
+    *,
+    document_id: Any,
+    version_id: Any,
+    chunk: ChunkRecord,
+    parent_chunk_id: Any | None,
+) -> Any:
+    cur.execute(
+        """
+        INSERT INTO document_chunks (
+            document_id,
+            version_id,
+            parent_chunk_id,
+            chunk_index,
+            chunk_level,
+            source_structure_type,
+            heading_path,
+            section_title,
+            clause_number,
+            page_start,
+            page_end,
+            chunk_text,
+            token_count,
+            char_count
+        )
+        VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        RETURNING id
+        """,
         (
             document_id,
             version_id,
-            chunk.parent_chunk_id,
+            parent_chunk_id,
             chunk.chunk_index,
             chunk.chunk_level,
             chunk.source_structure_type,
@@ -167,38 +250,20 @@ def insert_document_chunks(
             chunk.chunk_text,
             chunk.token_count,
             chunk.char_count,
-        )
-        for chunk in chunks
-    ]
-    if not rows:
-        return 0
+        ),
+    )
+    return cur.fetchone()["id"]
 
-    with conn.cursor() as cur:
-        cur.executemany(
-            """
-            INSERT INTO document_chunks (
-                document_id,
-                version_id,
-                parent_chunk_id,
-                chunk_index,
-                chunk_level,
-                source_structure_type,
-                heading_path,
-                section_title,
-                clause_number,
-                page_start,
-                page_end,
-                chunk_text,
-                token_count,
-                char_count
-            )
-            VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            """,
-            rows,
-        )
-    return len(rows)
+
+def _resolve_parent_chunk_id(
+    parent_reference: Any,
+    inserted_ids_by_index: dict[int, Any],
+) -> Any:
+    if isinstance(parent_reference, int):
+        return inserted_ids_by_index[parent_reference]
+    if isinstance(parent_reference, str) and parent_reference.isdigit():
+        return inserted_ids_by_index[int(parent_reference)]
+    return parent_reference
 
 
 def update_document_summary(
@@ -223,3 +288,156 @@ def update_document_summary(
                 document_id,
             ),
         )
+
+
+def expire_older_documents_in_family(
+    conn,
+    *,
+    current_document_id: Any,
+    metadata: DocumentMetadata,
+) -> Any | None:
+    if not metadata.document_family or not metadata.is_latest:
+        return None
+    if metadata.effective_date is None and metadata.effective_year is None:
+        return None
+    if _has_newer_document_in_family(
+        conn,
+        current_document_id=current_document_id,
+        metadata=metadata,
+    ):
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE documents
+                SET status = 'expired',
+                    is_latest = FALSE,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """,
+                (current_document_id,),
+            )
+        return None
+
+    previous_document_id = _find_previous_document_in_family(
+        conn,
+        current_document_id=current_document_id,
+        metadata=metadata,
+    )
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE documents
+            SET status = 'expired',
+                is_latest = FALSE,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE document_family = %s
+              AND id <> %s
+              AND (
+                  effective_date IS NULL
+                  OR %s::date IS NULL
+                  OR effective_date <= %s::date
+              )
+              AND (
+                  effective_year IS NULL
+                  OR %s::integer IS NULL
+                  OR effective_year <= %s::integer
+              )
+            """,
+            (
+                metadata.document_family,
+                current_document_id,
+                metadata.effective_date,
+                metadata.effective_date,
+                metadata.effective_year,
+                metadata.effective_year,
+            ),
+        )
+        cur.execute(
+            """
+            UPDATE documents
+            SET status = 'active',
+                is_latest = TRUE,
+                supersedes_document_id = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (previous_document_id, current_document_id),
+        )
+    return previous_document_id
+
+
+def _has_newer_document_in_family(
+    conn,
+    *,
+    current_document_id: Any,
+    metadata: DocumentMetadata,
+) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1
+            FROM documents
+            WHERE document_family = %s
+              AND id <> %s
+              AND (
+                  (%s::date IS NOT NULL AND effective_date > %s::date)
+                  OR (
+                      %s::date IS NULL
+                      AND %s::integer IS NOT NULL
+                      AND effective_year > %s::integer
+                  )
+              )
+            LIMIT 1
+            """,
+            (
+                metadata.document_family,
+                current_document_id,
+                metadata.effective_date,
+                metadata.effective_date,
+                metadata.effective_date,
+                metadata.effective_year,
+                metadata.effective_year,
+            ),
+        )
+        return cur.fetchone() is not None
+
+
+def _find_previous_document_in_family(
+    conn,
+    *,
+    current_document_id: Any,
+    metadata: DocumentMetadata,
+) -> Any | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id
+            FROM documents
+            WHERE document_family = %s
+              AND id <> %s
+              AND (
+                  effective_date IS NULL
+                  OR %s::date IS NULL
+                  OR effective_date <= %s::date
+              )
+              AND (
+                  effective_year IS NULL
+                  OR %s::integer IS NULL
+                  OR effective_year <= %s::integer
+              )
+            ORDER BY effective_date DESC NULLS LAST,
+                     effective_year DESC NULLS LAST,
+                     updated_at DESC
+            LIMIT 1
+            """,
+            (
+                metadata.document_family,
+                current_document_id,
+                metadata.effective_date,
+                metadata.effective_date,
+                metadata.effective_year,
+                metadata.effective_year,
+            ),
+        )
+        row = cur.fetchone()
+    return row["id"] if row else None

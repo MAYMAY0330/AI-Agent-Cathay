@@ -10,6 +10,7 @@ if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from ingestion import db_writer, logger, version_checker
+from ingestion import chunker
 from ingestion.checksum import generate_file_checksum
 from ingestion.config import DBConfig
 from ingestion.file_loader import load_file
@@ -103,12 +104,13 @@ def run_gemini_ingestion(
         _write_page_analysis(output_root, output_name, read_result.page_analysis)
 
         current_stage = "gemini_chunking"
-        chunks, summary, chunks_path, chunk_usage = chunk_markdown_with_gemini(
+        parent_chunks, summary, chunks_path, chunk_usage = chunk_markdown_with_gemini(
             read_result.markdown,
             metadata,
             output_root,
             output_name=output_name,
         )
+        chunks = chunker.add_child_chunks(parent_chunks)
         token_usage = list(read_result.usage or []) + [chunk_usage]
         usage_path = _write_token_usage(output_root, output_name, token_usage)
         usage_summary = _summarize_token_usage(token_usage)

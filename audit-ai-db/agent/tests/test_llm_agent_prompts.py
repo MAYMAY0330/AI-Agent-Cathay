@@ -63,8 +63,26 @@ class LlmAgentPromptTests(unittest.TestCase):
         )
         judgment = EVIDENCE_JUDGE_RESPONSE_SCHEMA["properties"]["judgments"]["items"]
         self.assertIn("checklist", judgment["required"])
+        checklist = judgment["properties"]["checklist"]
         self.assertEqual(
-            judgment["properties"]["checklist"]["properties"]["direct_answer"]["enum"],
+            checklist["required"],
+            [
+                "key_concepts",
+                "actor_match",
+                "action_match",
+                "condition_scope_match",
+                "direct_answer",
+                "concrete_rule",
+                "procedural_detail",
+                "quote_supports_answer",
+                "citation_metadata",
+                "authoritative_source",
+                "current_source",
+                "no_obvious_mismatch",
+            ],
+        )
+        self.assertEqual(
+            checklist["properties"]["direct_answer"]["enum"],
             [0, 1],
         )
 

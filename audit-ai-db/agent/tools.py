@@ -38,7 +38,32 @@ QUESTION_WORDS = {
     "要",
     "嗎",
 }
+GENERIC_CJK_TERMS = {
+    "客戶",
+    "公司",
+    "資料",
+    "使用",
+    "管理",
+    "辦理",
+    "相關",
+    "規定",
+    "處理",
+    "應用",
+}
 DOMAIN_KEYWORDS = [
+    "客戶健康資料",
+    "健康相關資料",
+    "健康資料",
+    "行銷接觸",
+    "特種個資",
+    "生成式AI",
+    "生成式",
+    "資訊揭露",
+    "告知方式",
+    "上線檢核",
+    "風險評估",
+    "AI服務應用",
+    "AI服務",
     "客戶資料共享",
     "資料共享",
     "集團資料共享",
@@ -57,6 +82,8 @@ DOMAIN_KEYWORDS = [
     "個資法",
     "共享政策",
     "管理辦法",
+    "行銷",
+    "揭露",
 ]
 CITATION_RE = re.compile(r"\[(S\d+)\]")
 
@@ -145,12 +172,16 @@ def retrieve_evidence(
     include_vector: bool,
     embedding_model: str | None,
     include_agentic: bool = False,
+    rerank: bool = False,
+    reranker_model: str | None = None,
+    rerank_candidates: int = 30,
 ) -> list[SearchResult]:
     filters = SearchFilters(
         document_type=task.filters.get("document_type"),
         status=task.filters.get("status", "active"),
         source_system=task.filters.get("source_system"),
         language=task.filters.get("language"),
+        is_latest=task.filters.get("is_latest", True),
     )
     return hybrid_search(
         conn,
@@ -160,6 +191,9 @@ def retrieve_evidence(
         include_vector=include_vector,
         include_agentic=include_agentic,
         embedding_model=embedding_model,
+        rerank=rerank,
+        reranker_model=reranker_model or "BAAI/bge-reranker-v2-m3",
+        rerank_candidates=rerank_candidates,
     )
 
 
@@ -315,22 +349,38 @@ def generate_cited_answer(
             status="insufficient_evidence",
             answer="目前無法由已檢索到的內部文件判定此問題。請補充更明確的問題或匯入相關文件。",
             model="none",
+            citations=[],
         )
     if dry_run:
         return AgentAnswer(
             status="dry_run",
             answer="DRY RUN: 已完成檢索、證據選擇與提示組裝；未呼叫 LLM 產生正式答覆。",
             model="dry-run",
+            citations=[],
         )
     if context is None:
         return AgentAnswer(
             status="insufficient_evidence",
             answer="目前沒有足夠的資料來源，無法根據已匯入文件回答此問題。",
             model="none",
+            citations=[],
         )
 
-    rag_answer = generate_answer(context)
-    return AgentAnswer(status="answered", answer=rag_answer.answer, model=rag_answer.model)
+    try:
+        rag_answer = generate_answer(context)
+    except IngestionError as exc:
+        return AgentAnswer(
+            status="failed_verification",
+            answer=f"LLM 回覆未符合結構化 JSON 契約，無法採用。error={exc.message}",
+            model="none",
+            citations=[],
+        )
+    return AgentAnswer(
+        status="answered",
+        answer=rag_answer.answer,
+        model=rag_answer.model,
+        citations=rag_answer.citations,
+    )
 
 
 def verify_citations(
@@ -342,9 +392,15 @@ def verify_citations(
 
     if answer.status in {"insufficient_evidence", "dry_run"}:
         return VerificationResult(valid=True, reason=f"Verification skipped for {answer.status}.")
+    if answer.status == "failed_verification":
+        return VerificationResult(
+            valid=False,
+            errors=["answer_generation_failed"],
+            reason=answer.answer,
+        )
 
     source_labels = {_source_label(source) for source in sources}
-    cited_labels = _dedupe_labels(CITATION_RE.findall(answer.answer))
+    cited_labels = _dedupe_labels([*answer.citations, *CITATION_RE.findall(answer.answer)])
     errors: list[str] = []
     if not cited_labels:
         errors.append("missing_citations")
@@ -378,6 +434,9 @@ def build_tool_registry(
     dry_run: bool,
     log_dir: Path,
     include_agentic: bool = False,
+    rerank: bool = False,
+    reranker_model: str | None = None,
+    rerank_candidates: int = 30,
 ) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
@@ -458,6 +517,9 @@ def build_tool_registry(
                 include_vector=include_vector,
                 include_agentic=include_agentic,
                 embedding_model=embedding_model,
+                rerank=rerank,
+                reranker_model=reranker_model,
+                rerank_candidates=rerank_candidates,
             ),
         )
     )
@@ -620,7 +682,22 @@ def _keyword_phrases(question: str) -> list[str]:
             compact = compact.replace(word, "")
         if 2 <= len(compact) <= 12:
             keywords.append(compact)
+        elif len(compact) > 12:
+            keywords.extend(_cjk_keyword_windows(compact))
     return _dedupe_labels(keywords)[:12]
+
+
+def _cjk_keyword_windows(text: str) -> list[str]:
+    windows: list[str] = []
+    for size in (6, 5, 4):
+        for index in range(0, max(len(text) - size + 1, 0)):
+            term = text[index : index + size]
+            if term in GENERIC_CJK_TERMS:
+                continue
+            if any(generic in term for generic in ("什麼", "甚麼", "如何", "是否")):
+                continue
+            windows.append(term)
+    return windows[:8]
 
 
 def _compact_query(question: str, keywords: list[str]) -> str:
@@ -636,11 +713,22 @@ def _compact_query(question: str, keywords: list[str]) -> str:
 
 def _expanded_query(question: str) -> str | None:
     expansions: list[str] = []
+    if "健康" in question and "行銷" in question:
+        expansions.append("健康相關資料 行銷接觸 特種個資 同意")
+    if "生成式AI" in question or ("生成式" in question and "AI" in question):
+        if "揭露" in question or "告知" in question:
+            expansions.append("生成式AI 告知客戶或消費者 揭露 告知方式")
+        else:
+            expansions.append("生成式AI 風險評估 管控")
+    if ("AI" in question or "人工智慧" in question) and ("風險評估" in question or "上線" in question or "檢核" in question):
+        expansions.append("AI服務應用 風險評估 檢核暨風險評估表 上線檢核表")
     if "告知" in question or "同意" in question:
         expansions.append("資料共享 事前取得客戶同意 個資告知")
     if "拒絕" in question or "停止" in question:
         expansions.append("拒絕集團資料共享 停止共享使用 客戶註記")
-    if "負面" in question or "風險" in question:
+    if ("負面" in question or "風險類資料" in question) or (
+        "風險" in question and not ("AI" in question or "人工智慧" in question)
+    ):
         expansions.append("資料共享 負面資訊 風險類資料 必要查證")
     if "保密" in question or "洩漏" in question:
         expansions.append("資料共享 保密義務 安全維護措施")
@@ -765,10 +853,26 @@ def _score_source_checklist(
         "法務室意見",
     )
     mismatch = _has_obvious_mismatch(question, text)
+    actor_match = _has_actor_match(question, haystack)
+    action_match = _has_action_match(question, haystack)
+    condition_scope_match = _has_condition_scope_match(question, haystack)
+    direct_answer = (
+        key_concepts >= 1
+        and actor_match
+        and action_match
+        and condition_scope_match
+        and _has_direct_answer_marker(question, text, direct_markers)
+        and not mismatch
+    )
     return {
-        "direct_answer": 1 if key_concepts >= 1 and _has_direct_answer_marker(question, text, direct_markers) and not mismatch else 0,
         "key_concepts": 1 if key_concepts > 0 else 0,
+        "actor_match": 1 if actor_match else 0,
+        "action_match": 1 if action_match else 0,
+        "condition_scope_match": 1 if condition_scope_match else 0,
+        "direct_answer": 1 if direct_answer else 0,
         "concrete_rule": 1 if any(marker in haystack for marker in concrete_markers) else 0,
+        "procedural_detail": 1 if _has_procedural_detail(haystack) else 0,
+        "quote_supports_answer": 1 if direct_answer and _supporting_quote(question_keywords, text) else 0,
         "citation_metadata": 1 if bool(source.title and (source.section_title or source.heading_path or source.clause_number or source.page_start)) else 0,
         "authoritative_source": 1 if source.document_type in {"legal_opinion", "internal_rule", "policy_guideline"} else 0,
         "current_source": 1,
@@ -781,6 +885,15 @@ def _matched_keyword_count(question_keywords: list[str], haystack: str) -> int:
 
 
 def _has_obvious_mismatch(question: str, text: str) -> bool:
+    if "拒絕" in question and "資料共享" in question:
+        if "拒絕申請" in text and not _contains_any(text, ("停止", "註記", "共享使用", "拒絕集團資料共享")):
+            return True
+    if _asks_generative_ai_disclosure(question):
+        if not _contains_any(text, ("揭露", "告知客戶", "告知客戶或消費者", "服務或互動為AI所提供", "告知方式")):
+            return True
+    if _asks_health_marketing(question):
+        if not (_has_health_specific_context(text) and _contains_any(text, ("行銷", "行銷接觸"))):
+            return True
     mismatch_pairs = [
         ("資料共享", "AI"),
         ("告知", "申訴"),
@@ -798,6 +911,36 @@ def _has_direct_answer_marker(
     text: str,
     direct_markers: tuple[str, ...],
 ) -> bool:
+    if _asks_health_marketing(question):
+        return (
+            _has_health_specific_context(text)
+            and _contains_any(text, ("行銷", "行銷接觸"))
+            and _contains_any(text, ("同意", "不得", "得", "可", "個資法", "特種個資", "法務室意見"))
+        )
+    if _asks_generative_ai_disclosure(question):
+        return _contains_any(
+            text,
+            (
+                "告知客戶或消費者",
+                "服務或互動為AI所提供",
+                "揭露以下內容",
+                "AI所提供之告知方式",
+                "揭露予客戶或消費者",
+                "揭露",
+            ),
+        )
+    if "拒絕" in question and "資料共享" in question:
+        return _contains_any(
+            text,
+            (
+                "拒絕集團資料共享",
+                "停止該客戶資料於集團之共享使用",
+                "停止共享",
+                "共享使用",
+                "客戶註記",
+                "調整以停止",
+            ),
+        )
     if "客戶" in question and "告知" in question and not any(
         term in text
         for term in (
@@ -822,12 +965,112 @@ def _has_direct_answer_marker(
     return any(marker in text for marker in direct_markers)
 
 
+def _has_actor_match(question: str, text: str) -> bool:
+    actor_groups = [
+        ("客戶", ("客戶", "當事人", "消費者", "申訴人", "會員")),
+        ("公司", ("本公司", "各公司", "需求單位", "執行單位", "申訴受理窗口", "權責單位")),
+        ("法務", ("法務室", "法令遵循", "律師")),
+        ("主管機關", ("主管機關", "金管會")),
+        ("員工", ("員工", "人員")),
+    ]
+    relevant_groups = [synonyms for marker, synonyms in actor_groups if marker in question]
+    if not relevant_groups:
+        return True
+    return any(any(term in text for term in synonyms) for synonyms in relevant_groups)
+
+
+def _has_action_match(question: str, text: str) -> bool:
+    action_groups = [
+        ("拒絕", ("拒絕", "停止", "註記", "調整")),
+        ("停止", ("停止", "註記", "調整")),
+        ("告知", ("告知", "揭露", "通知", "載明")),
+        ("揭露", ("揭露", "告知", "告知方式")),
+        ("同意", ("同意", "書面同意", "徵得")),
+        ("行銷", ("行銷", "行銷接觸", "商品行銷")),
+        ("風險評估", ("風險評估", "檢核", "評估", "風險矩陣")),
+        ("上線", ("上線", "上線前", "上線檢核")),
+        ("刪除", ("刪除", "異動", "更動")),
+    ]
+    relevant_groups = [synonyms for marker, synonyms in action_groups if marker in question]
+    if not relevant_groups:
+        return True
+    return any(any(term in text for term in synonyms) for synonyms in relevant_groups)
+
+
+def _has_condition_scope_match(question: str, text: str) -> bool:
+    if "拒絕" in question and "資料共享" in question:
+        return _contains_any(text, ("拒絕集團資料共享", "停止該客戶資料於集團之共享使用", "客戶註記", "共享使用"))
+    if _asks_generative_ai_disclosure(question):
+        return _contains_any(text, ("直接提供客戶或消費者使用", "告知客戶或消費者", "服務或互動為AI所提供", "揭露"))
+    if _asks_health_marketing(question):
+        return _has_health_specific_context(text) and _contains_any(text, ("行銷", "行銷接觸"))
+    if "上線" in question and ("AI" in question or "AI服務" in question):
+        return _contains_any(text, ("上線前", "上線檢核表", "AI 服務應用案件上線檢核表", "洽評估單位評估確認"))
+    if "資料共享" in question:
+        return "資料共享" in text
+    if "AI" in question or "人工智慧" in question:
+        return _contains_any(text, ("AI", "人工智慧", "AI服務"))
+    return True
+
+
+def _has_procedural_detail(text: str) -> bool:
+    return _contains_any(
+        text,
+        (
+            "應立即",
+            "應依",
+            "應於",
+            "應由",
+            "通知",
+            "會辦",
+            "會簽",
+            "填具",
+            "呈報",
+            "審查",
+            "回覆",
+            "申請",
+            "評估確認",
+            "30日",
+            "作業單位",
+        ),
+    )
+
+
+def _asks_health_marketing(question: str) -> bool:
+    return "健康" in question and "行銷" in question
+
+
+def _asks_generative_ai_disclosure(question: str) -> bool:
+    return (
+        ("生成式AI" in question or ("生成式" in question and "AI" in question))
+        and ("揭露" in question or "告知" in question)
+    )
+
+
+def _has_health_specific_context(text: str) -> bool:
+    return _contains_any(
+        text,
+        (
+            "客戶健康資料",
+            "客戶健康相關資料",
+            "健康相關資料",
+            "健康活動",
+            "特種個資",
+            "健康檢查及犯罪前科之個人資料",
+        ),
+    )
+
+
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term in text for term in terms)
+
+
 def _classify_checklist_score(score: int, checklist: dict[str, int]) -> str:
-    if score >= 6 and checklist.get("direct_answer") == 1:
+    if score >= 10 and checklist.get("direct_answer") == 1 and checklist.get("no_obvious_mismatch") == 1:
         return "strong"
-    if score >= 4:
+    if score >= 7:
         return "supporting"
-    if score >= 2:
+    if score >= 4:
         return "background"
     return "irrelevant"
 

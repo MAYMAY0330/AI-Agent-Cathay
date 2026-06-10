@@ -365,6 +365,7 @@ def _call_gemini_image(
     image_path: Path,
     prompt: str,
     call_name: str,
+    timeout_seconds: int = 90,
 ) -> GeminiCallResult:
     try:
         from PIL import Image
@@ -377,7 +378,10 @@ def _call_gemini_image(
     for attempt in range(3):
         try:
             with Image.open(image_path) as image:
-                response = model.generate_content([prompt, image])
+                response = model.generate_content(
+                    [prompt, image],
+                    request_options={"timeout": timeout_seconds},
+                )
             return GeminiCallResult(
                 text=_response_text(response).strip(),
                 usage=_response_usage(response, call_name, model_name),
@@ -398,6 +402,7 @@ def call_gemini_text(
     system: str,
     max_tokens: int = 8192,
     call_name: str = "gemini_text",
+    timeout_seconds: int = 90,
 ) -> GeminiCallResult:
     api_key, model_name = load_gemini_settings()
     model = create_gemini_model(api_key, model_name)
@@ -408,6 +413,7 @@ def call_gemini_text(
             response = model.generate_content(
                 full_prompt,
                 generation_config=generation_config,
+                request_options={"timeout": timeout_seconds},
             )
             return GeminiCallResult(
                 text=_response_text(response).strip(),

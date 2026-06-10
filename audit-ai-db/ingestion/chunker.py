@@ -21,7 +21,19 @@ def create_chunks(
     target_tokens: int = 800,
     max_tokens: int = 1200,
     overlap_tokens: int = 100,
+    hierarchical: bool = True,
+    child_target_tokens: int = 250,
+    child_max_tokens: int = 350,
+    child_overlap_tokens: int = 40,
 ) -> list[ChunkRecord]:
+    if hierarchical:
+        return create_hierarchical_chunks(
+            sections,
+            child_target_tokens=child_target_tokens,
+            child_max_tokens=child_max_tokens,
+            child_overlap_tokens=child_overlap_tokens,
+        )
+
     chunks: list[ChunkRecord] = []
 
     for section in sections:
@@ -49,6 +61,123 @@ def create_chunks(
                     chunk_text=part,
                     token_count=estimate_token_count(part),
                     char_count=len(part),
+                )
+            )
+
+    return chunks
+
+
+def create_hierarchical_chunks(
+    sections: list[StructuredSection],
+    *,
+    child_target_tokens: int = 250,
+    child_max_tokens: int = 350,
+    child_overlap_tokens: int = 40,
+) -> list[ChunkRecord]:
+    chunks: list[ChunkRecord] = []
+
+    for section in sections:
+        text = section.text.strip()
+        if not text:
+            continue
+
+        parent_index = len(chunks) + 1
+        chunks.append(
+            ChunkRecord(
+                chunk_index=parent_index,
+                chunk_level="parent",
+                source_structure_type=section.source_structure_type or section.chunk_level,
+                heading_path=section.heading_path,
+                section_title=section.section_title,
+                clause_number=section.clause_number,
+                page_start=section.page_start,
+                page_end=section.page_end,
+                chunk_text=text,
+                token_count=estimate_token_count(text),
+                char_count=len(text),
+            )
+        )
+
+        child_parts = _split_section_text(
+            text,
+            target_tokens=child_target_tokens,
+            max_tokens=child_max_tokens,
+            overlap_tokens=child_overlap_tokens,
+        )
+        for child_part_index, child_text in enumerate(child_parts, start=1):
+            child_title = section.section_title
+            if len(child_parts) > 1 and child_title:
+                child_title = f"{child_title} ({child_part_index}/{len(child_parts)})"
+
+            chunks.append(
+                ChunkRecord(
+                    chunk_index=len(chunks) + 1,
+                    chunk_level="child",
+                    source_structure_type=f"{section.source_structure_type}_child",
+                    heading_path=section.heading_path,
+                    section_title=child_title,
+                    clause_number=section.clause_number,
+                    page_start=section.page_start,
+                    page_end=section.page_end,
+                    chunk_text=child_text,
+                    token_count=estimate_token_count(child_text),
+                    char_count=len(child_text),
+                    parent_chunk_id=parent_index,
+                )
+            )
+
+    return chunks
+
+
+def add_child_chunks(
+    parent_chunks: list[ChunkRecord],
+    *,
+    child_target_tokens: int = 250,
+    child_max_tokens: int = 350,
+    child_overlap_tokens: int = 40,
+) -> list[ChunkRecord]:
+    chunks: list[ChunkRecord] = []
+    for parent in parent_chunks:
+        parent_index = len(chunks) + 1
+        normalized_parent = ChunkRecord(
+            chunk_index=parent_index,
+            chunk_level="parent",
+            source_structure_type=parent.source_structure_type or parent.chunk_level,
+            heading_path=parent.heading_path,
+            section_title=parent.section_title,
+            clause_number=parent.clause_number,
+            page_start=parent.page_start,
+            page_end=parent.page_end,
+            chunk_text=parent.chunk_text,
+            token_count=parent.token_count,
+            char_count=parent.char_count,
+        )
+        chunks.append(normalized_parent)
+
+        child_parts = _split_section_text(
+            parent.chunk_text,
+            target_tokens=child_target_tokens,
+            max_tokens=child_max_tokens,
+            overlap_tokens=child_overlap_tokens,
+        )
+        for child_part_index, child_text in enumerate(child_parts, start=1):
+            child_title = parent.section_title
+            if len(child_parts) > 1 and child_title:
+                child_title = f"{child_title} ({child_part_index}/{len(child_parts)})"
+            chunks.append(
+                ChunkRecord(
+                    chunk_index=len(chunks) + 1,
+                    chunk_level="child",
+                    source_structure_type=f"{parent.source_structure_type}_child",
+                    heading_path=parent.heading_path,
+                    section_title=child_title,
+                    clause_number=parent.clause_number,
+                    page_start=parent.page_start,
+                    page_end=parent.page_end,
+                    chunk_text=child_text,
+                    token_count=estimate_token_count(child_text),
+                    char_count=len(child_text),
+                    parent_chunk_id=parent_index,
                 )
             )
 
@@ -114,4 +243,3 @@ def _split_long_paragraph(
             break
         start = max(end - overlap_chars, start + 1)
     return [part for part in parts if part]
-

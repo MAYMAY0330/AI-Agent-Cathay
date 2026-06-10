@@ -4,13 +4,23 @@ from ingestion import db_writer
 from ingestion.models import VersionDecision
 
 
-def check_version(conn, internal_code: str, file_checksum: str) -> VersionDecision:
+def check_version(
+    conn,
+    internal_code: str,
+    file_checksum: str,
+    *,
+    force_reprocess: bool = False,
+) -> VersionDecision:
     document = db_writer.fetch_document_by_internal_code(conn, internal_code)
     if document is None:
         return VersionDecision(action="new_document", next_version_label="v1")
 
     current_version = db_writer.fetch_current_version(conn, document["id"])
-    if current_version and current_version.get("file_checksum") == file_checksum:
+    if (
+        current_version
+        and current_version.get("file_checksum") == file_checksum
+        and not force_reprocess
+    ):
         return VersionDecision(
             action="duplicate",
             document_id=document["id"],
@@ -25,4 +35,3 @@ def check_version(conn, internal_code: str, file_checksum: str) -> VersionDecisi
         current_version_id=current_version["id"] if current_version else None,
         next_version_label=f"v{next_number}",
     )
-

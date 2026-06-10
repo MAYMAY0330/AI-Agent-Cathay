@@ -91,6 +91,37 @@ class AgenticSearchTests(unittest.TestCase):
         self.assertIn("agentic", results[0].match_sources)
         agentic.assert_called_once()
 
+    def test_search_result_tracks_parent_context_and_matched_child(self) -> None:
+        result = SearchResult.from_row(
+            {
+                "chunk_id": "parent-1",
+                "parent_chunk_id": "parent-1",
+                "matched_chunk_id": "child-1",
+                "document_id": "doc-1",
+                "version_id": "ver-1",
+                "internal_code": "TEST-1",
+                "title": "測試文件",
+                "document_type": "internal_rule",
+                "source_system": "test",
+                "section_title": "第一條",
+                "heading_path": "第一條",
+                "clause_number": "第一條",
+                "page_start": 1,
+                "page_end": 1,
+                "chunk_index": 1,
+                "chunk_text": "完整父層條文內容",
+                "matched_chunk_text": "精準子層命中文字",
+                "score": 0.8,
+            },
+            match_sources=["keyword"],
+        )
+
+        self.assertEqual(result.chunk_id, "parent-1")
+        self.assertEqual(result.parent_chunk_id, "parent-1")
+        self.assertEqual(result.matched_chunk_id, "child-1")
+        self.assertEqual(result.chunk_text, "完整父層條文內容")
+        self.assertEqual(result.matched_chunk_text, "精準子層命中文字")
+
 
 def _result(
     *,
@@ -122,4 +153,3 @@ def _result(
 
 if __name__ == "__main__":
     unittest.main()
-

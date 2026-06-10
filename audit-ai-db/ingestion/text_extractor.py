@@ -5,6 +5,7 @@ import re
 from typing import Iterator
 
 from ingestion.models import IngestionError, TextBlock
+from ingestion.text_cleaner import clean_extracted_text
 
 
 def extract_text(file_path: Path, file_type: str) -> list[TextBlock]:
@@ -12,6 +13,8 @@ def extract_text(file_path: Path, file_type: str) -> list[TextBlock]:
         return _extract_docx(file_path)
     if file_type == "pdf":
         return _extract_pdf(file_path)
+    if file_type in {"xlsx", "xls", "csv"}:
+        return _extract_markitdown_file(file_path, file_type)
     raise IngestionError("text_extraction", f"unsupported file type: {file_type}")
 
 
@@ -43,7 +46,7 @@ def _extract_docx(file_path: Path) -> list[TextBlock]:
     blocks: list[TextBlock] = []
     for block in iter_block_items(document):
         if isinstance(block, Paragraph):
-            text = block.text.strip()
+            text = clean_extracted_text(block.text)
             if not text:
                 continue
             style = block.style.name if block.style else "paragraph"
@@ -58,10 +61,14 @@ def _extract_docx(file_path: Path) -> list[TextBlock]:
 
         rows = []
         for row in block.rows:
-            cell_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            cell_text = []
+            for cell in row.cells:
+                cleaned_cell = clean_extracted_text(cell.text).replace("\n", " ")
+                if cleaned_cell:
+                    cell_text.append(cleaned_cell)
             if cell_text:
                 rows.append(" | ".join(cell_text))
-        table_text = "\n".join(rows).strip()
+        table_text = clean_extracted_text("\n".join(rows))
         if table_text:
             blocks.append(
                 TextBlock(
@@ -91,7 +98,7 @@ def _extract_pdf(file_path: Path) -> list[TextBlock]:
     try:
         for page_index in range(document.page_count):
             page = document.load_page(page_index)
-            text = page.get_text("text").strip()
+            text = clean_extracted_text(page.get_text("text"))
             if text:
                 blocks.append(
                     TextBlock(
@@ -128,7 +135,7 @@ def _extract_pdf_with_pypdf(file_path: Path) -> list[TextBlock]:
     blocks: list[TextBlock] = []
     for page_index, page in enumerate(reader.pages):
         try:
-            text = (page.extract_text() or "").strip()
+            text = clean_extracted_text(page.extract_text() or "")
         except Exception:
             continue
         if text:
@@ -146,6 +153,37 @@ def _extract_pdf_with_pypdf(file_path: Path) -> list[TextBlock]:
             "text_extraction", "scanned PDF or no extractable text found"
         )
     return blocks
+
+
+def _extract_markitdown_file(file_path: Path, file_type: str) -> list[TextBlock]:
+    if file_type == "csv":
+        try:
+            text = clean_extracted_text(file_path.read_text(encoding="utf-8-sig"))
+        except UnicodeDecodeError:
+            text = clean_extracted_text(file_path.read_text(encoding="big5", errors="ignore"))
+        except OSError as exc:
+            raise IngestionError("text_extraction", f"unable to open CSV: {exc}") from exc
+        if not text:
+            raise IngestionError("text_extraction", "CSV contains no extractable text")
+        return [TextBlock(block_index=1, text=text, style="table")]
+
+    try:
+        from markitdown import MarkItDown
+    except ImportError as exc:
+        raise IngestionError(
+            "text_extraction",
+            "MarkItDown is required for spreadsheet extraction. Install dependencies with: pip install -r requirements.txt",
+        ) from exc
+
+    try:
+        result = MarkItDown().convert(str(file_path))
+        text = clean_extracted_text(result.text_content)
+    except Exception as exc:
+        raise IngestionError("text_extraction", f"unable to convert spreadsheet: {exc}") from exc
+
+    if not text:
+        raise IngestionError("text_extraction", "spreadsheet contains no extractable text")
+    return [TextBlock(block_index=1, text=text, style="table")]
 
 
 def _has_meaningful_pdf_text(blocks: list[TextBlock]) -> bool:

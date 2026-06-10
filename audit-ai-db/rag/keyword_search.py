@@ -26,20 +26,23 @@ def search_chunks(
             ),
             scored AS (
                 SELECT
-                    c.id AS chunk_id,
+                    COALESCE(p.id, c.id) AS chunk_id,
+                    p.id AS parent_chunk_id,
+                    c.id AS matched_chunk_id,
                     c.document_id,
                     c.version_id,
                     d.internal_code,
                     d.title,
                     d.document_type,
                     d.source_system,
-                    c.section_title,
-                    c.heading_path,
-                    c.clause_number,
-                    c.page_start,
-                    c.page_end,
-                    c.chunk_index,
-                    c.chunk_text,
+                    COALESCE(p.section_title, c.section_title) AS section_title,
+                    COALESCE(p.heading_path, c.heading_path) AS heading_path,
+                    COALESCE(p.clause_number, c.clause_number) AS clause_number,
+                    COALESCE(p.page_start, c.page_start) AS page_start,
+                    COALESCE(p.page_end, c.page_end) AS page_end,
+                    COALESCE(p.chunk_index, c.chunk_index) AS chunk_index,
+                    COALESCE(p.chunk_text, c.chunk_text) AS chunk_text,
+                    c.chunk_text AS matched_chunk_text,
                     ts_rank_cd(c.search_vector, q.ts_query) AS full_text_score,
                     GREATEST(
                         similarity(c.chunk_text, %(query)s),
@@ -60,14 +63,24 @@ def search_chunks(
                         0.0
                     ) AS term_match_score
                 FROM document_chunks c
+                LEFT JOIN document_chunks p ON p.id = c.parent_chunk_id
                 JOIN documents d ON d.id = c.document_id
                 JOIN document_versions v ON v.id = c.version_id
                 CROSS JOIN q
                 WHERE v.is_current = TRUE
+                  AND (
+                      c.parent_chunk_id IS NOT NULL
+                      OR NOT EXISTS (
+                          SELECT 1
+                          FROM document_chunks child
+                          WHERE child.parent_chunk_id = c.id
+                      )
+                  )
                   AND (%(document_type)s::text IS NULL OR d.document_type = %(document_type)s::text)
                   AND (%(status)s::text IS NULL OR d.status = %(status)s::text)
                   AND (%(source_system)s::text IS NULL OR d.source_system = %(source_system)s::text)
                   AND (%(language)s::text IS NULL OR d.language = %(language)s::text)
+                  AND (%(is_latest)s::boolean IS NULL OR d.is_latest = %(is_latest)s::boolean)
             )
             SELECT *,
                 (
@@ -91,6 +104,7 @@ def search_chunks(
                 "status": filters.status,
                 "source_system": filters.source_system,
                 "language": filters.language,
+                "is_latest": filters.is_latest,
             },
         )
         rows = cur.fetchall()

@@ -13,6 +13,7 @@ from agent.state import AgentState
 from agent.workflow import run_agent
 from ingestion.models import IngestionError
 from rag.embedding_client import DEFAULT_EMBEDDING_MODEL
+from rag.reranker import DEFAULT_RERANKER_MODEL
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,6 +34,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable the small RAG search agent for extra validated search queries.",
     )
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Rerank the hybrid candidate pool with a local BGE reranker.",
+    )
+    parser.add_argument("--reranker-model", default=DEFAULT_RERANKER_MODEL)
+    parser.add_argument("--rerank-candidates", type=int, default=30)
     parser.add_argument("--max-context-chars", type=int, default=12000)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
@@ -69,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
             llm_decisions=not args.no_llm_decisions,
             log_dir=args.log_dir,
             max_context_chars=args.max_context_chars,
+            rerank=args.rerank,
+            reranker_model=args.reranker_model,
+            rerank_candidates=args.rerank_candidates,
         )
     except IngestionError as exc:
         print(f"FAILED stage={exc.stage} error={exc.message}", file=sys.stderr)
@@ -87,6 +98,9 @@ def main(argv: list[str] | None = None) -> int:
 
 def _json_payload(state: AgentState, *, include_prompt: bool) -> dict:
     payload = state.to_dict(include_prompt=include_prompt)
+    payload["answer_detail"] = payload.pop("answer", None)
+    payload["answer"] = state.answer.answer if state.answer else ""
+    payload["citations"] = state.answer.citations if state.answer else []
     if state.evidence_bundle:
         payload["sources"] = [asdict(source) for source in state.evidence_bundle.sources]
     return payload

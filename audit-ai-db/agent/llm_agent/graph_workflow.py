@@ -138,7 +138,7 @@ def _make_plan_node(
             "iteration": iteration,
             "refined_query": refined_query,
         }
-        if llm_decisions and not dry_run:
+        if llm_decisions:
             result = registry.call_tool("plan_search_tasks_llm", payload)
             tasks = result["tasks"]
             state.llm_decisions.append(result["decision"])
